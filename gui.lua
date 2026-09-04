@@ -1351,6 +1351,18 @@ local function SaveFile(fileName)
     writefile(filePath, jsonStr)
 end
 
+local function DeleteFile(fileName)
+    if not delfile or not isfile then return end
+    if not fileName or fileName == "" then return end
+    
+    local filePath = ConfigFolder .. "/" .. fileName
+    if isfile(filePath) then
+        pcall(function()
+            delfile(filePath)
+        end)
+    end
+end
+
 configDropdownController = SettingsTab:AddDropdown("Выбрать конфиг", "SelectedConfigTarget", dropdownFiles, dropdownFiles[1], function(selectedFile)
     if selectedFile and selectedFile ~= "Нет элементов" then
         LoadFile(selectedFile)
@@ -1365,6 +1377,22 @@ SettingsTab:AddButton("Сохранить текущий конфиг", function
         local updatedList = GetSavedConfigFiles()
         if configDropdownController and configDropdownController.Refresh then
             configDropdownController.Refresh(updatedList)
+        end
+    end
+end)
+
+
+SettingsTab:AddButton("Удалить выбранный конфиг", function()
+    if configDropdownController and configDropdownController.GetSelected then
+        local selectedFile = configDropdownController.GetSelected()
+        if selectedFile and selectedFile ~= "Нет элементов" then
+            DeleteFile(selectedFile)
+            local updatedList = GetSavedConfigFiles()
+            configDropdownController.Refresh(updatedList)
+            -- Автоматически загружаем первый доступный конфиг после удаления
+            if updatedList[1] then
+                LoadFile(updatedList[1])
+            end
         end
     end
 end)
