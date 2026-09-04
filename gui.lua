@@ -1195,7 +1195,7 @@ end)
 ---------------------------------------------------------
 local UniversalTab = Hub:CreateTab("Основное", 2)
 
-UniversalTab:AddWarning("⚠️ ВНИМАНИЕ: Это основные функции   скрипта которые будут присутствовать везде. Использование на серверах с античитом приведет к кику или бану!")
+UniversalTab:AddWarning("⚠️ ВНИМАНИЕ: Это основные функции скрипта которые будует присутствовать везде. Использование на серверах с античитом приведет к кику или бану!")
 
 UniversalTab:AddSection("Управление персонажем")
 
@@ -1244,6 +1244,25 @@ end)
 
 UniversalTab:AddToggle("Анти-флинг", "AntiFling", false, function(state)
     AntiFlingEnabled = state
+end)
+
+UniversalTab:AddSection("💤 Утилиты")
+UniversalTab:AddToggle("Anti-AFK", false, function(state)
+    if state then
+        local vu = game:GetService("VirtualUser")
+        getgenv().AntiAfkConnection = game:GetService("Players").LocalPlayer.Idled:Connect(function()
+            vu:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+            task.wait(1)
+            vu:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+        end)
+        print("[BloxyScripts]: Anti-AFK активирован")
+    else
+        if getgenv().AntiAfkConnection then
+            getgenv().AntiAfkConnection:Disconnect()
+            getgenv().AntiAfkConnection = nil
+        end
+        print("[BloxyScripts]: Anti-AFK деактивирован")
+    end
 end)
 
 ---------------------------------------------------------
