@@ -15,7 +15,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
-local VirtualInputManager = game:GetService("VirtualInputManager")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Stats = game:GetService("Stats")
 
 local LocalPlayer = Players.LocalPlayer
@@ -23,18 +23,15 @@ local LocalPlayer = Players.LocalPlayer
 -- State & Settings
 local State = {
     AutoParry = false,
-    BaseParryDistance = 25,
-    CurrentDynamicDistance = 25,
-    InstantPrediction = true,
+    BaseParryDistance = 30,
     Visualizer = false,
-    DomeMaterialIndex = 4, -- ForceField по умолчанию
-    DomeColorIndex = 2, -- Cyan
+    DomeMaterialIndex = 4,
+    DomeColorIndex = 2,
     DomeTransparency = 0.35,
     FPSBoost = false,
     AutoFarm = false,
 }
 
--- Пресеты цветов
 local ColorsList = {
     {Name = "Green", Color = Color3.fromRGB(0, 255, 120)},
     {Name = "Cyan", Color = Color3.fromRGB(0, 220, 255)},
@@ -44,7 +41,6 @@ local ColorsList = {
     {Name = "White", Color = Color3.fromRGB(255, 255, 255)}
 }
 
--- Пресеты материалов
 local MaterialsList = {
     {Name = "SmoothPlastic", Material = Enum.Material.SmoothPlastic},
     {Name = "Glass", Material = Enum.Material.Glass},
@@ -90,73 +86,72 @@ local function GetHumanoid(plr)
     return char and char:FindFirstChildWhichIsA("Humanoid")
 end
 
-local function GetPing()
-    local success, val = pcall(function()
-        return Stats.Network.ServerStatsItem["Data Receive Kbps"]:GetValue() / 1000
-    end)
-    return success and val or 0.05
+local function GetParryRemote()
+    local remotesFolder = ReplicatedStorage:FindFirstChild("Remotes") or ReplicatedStorage:FindFirstChild("Packages")
+    local ParryEvent = ReplicatedStorage:FindFirstChild("ParryButtonPress", true) 
+        or (remotesFolder and remotesFolder:FindFirstChild("ParryButtonPress", true))
+    return ParryEvent
 end
 
-local function SimulateKeyPress(key)
-    VirtualInputManager:SendKeyEvent(true, key, false, nil)
-    task.wait(0.005)
-    VirtualInputManager:SendKeyEvent(false, key, false, nil)
+local function TriggerParry()
+    local remote = GetParryRemote()
+    if remote and remote:IsA("RemoteEvent") then
+        remote:FireServer()
+    else
+        local vim = game:GetService("VirtualInputManager")
+        vim:SendKeyEvent(true, Enum.KeyCode.F, false, nil)
+        vim:SendKeyEvent(false, Enum.KeyCode.F, false, nil)
+    end
 end
 
--- Авто-паррирование с проверкой, что мяч летит именно в игрока
+-- Ультра-быстрое авто-паррирование с жесткой проверкой цели (Target)
 local ParryConnection = nil
 local lastParryTick = 0
 
 local function StartAutoParry()
     if ParryConnection then ParryConnection:Disconnect() end
-    ParryConnection = RunService.RenderStepped:Connect(function()
+    ParryConnection = RunService.Heartbeat:Connect(function()
         if not State.AutoParry then return end
         
         local ball = GetBall()
         local root = GetRootPart(LocalPlayer)
         if not ball or not root then return end
         
-        local ballPos = ball.Position
-        local rootPos = root.Position
-        local dist = (ballPos - rootPos).Magnitude
-        local velocity = ball.AssemblyLinearVelocity
-        local speed = velocity.Magnitude
+        local dist = (ball.Position - root.Position).Magnitude
         
-        local dynamicDistance = State.BaseParryDistance
-        if speed > 20 then
-            dynamicDistance = math.clamp(State.BaseParryDistance + (speed / 6), State.BaseParryDistance, 50)
+        -- ЖЕСТКАЯ ПРОВЕРКА ЦЕЛИ: Мяч должен быть направлен именно на нас
+        local targetAttr = ball:GetAttribute("target") or ball:GetAttribute("Target")
+        local isTargetingMe = false
+        
+        if targetAttr then
+            if typeof(targetAttr) == "Instance" then
+                isTargetingMe = (targetAttr == LocalPlayer or targetAttr == LocalPlayer.Character)
+            elseif typeof(targetAttr) == "string" then
+                isTargetingMe = (targetAttr == LocalPlayer.Name)
+            end
+        else
+            -- Запасной векторный метод, если атрибут скрыт: мяч летит в нашу сторону (dot > 0.6)
+            local velocity = ball.AssemblyLinearVelocity
+            if velocity.Magnitude > 0 then
+                local dirToPlayer = (root.Position - ball.Position).Unit
+                local ballDir = velocity.Unit
+                local dot = ballDir:Dot(dirToPlayer)
+                isTargetingMe = (dot > 0.65)
+            end
         end
-        State.CurrentDynamicDistance = math.clamp(dynamicDistance, 10, 50)
         
-        local dirToPlayer = (rootPos - ballPos).Unit
-        local ballDir = speed > 0 and velocity.Unit or Vector3.new()
-        local dot = ballDir:Dot(dirToPlayer)
-        
-        -- Проверяем атрибут цели игры, если он есть
-        local targetPlayer = ball:GetAttribute("target") or ball:GetAttribute("Target")
-        local isTargetingMe = (targetPlayer == LocalPlayer.Name or targetPlayer == LocalPlayer)
-        
-        -- Геометрическая проверка: мяч должен лететь прямо на нас (а не пролетать рядом)
-        local isHeadingTowardsMe = dot > 0.75
-        
-        local closingSpeed = speed * math.max(0, dot)
-        local timeToCollision = closingSpeed > 0 and (dist / closingSpeed) or 999
-        
-        local ping = GetPing()
-        local thresholdTime = math.clamp(ping * 1.5, 0.03, 0.12)
-        
-        -- Срабатываем только если расстояние/время критические И мяч летит конкретно в нас
-        if (dist <= State.CurrentDynamicDistance or timeToCollision <= thresholdTime) and (isHeadingTowardsMe or isTargetingMe) then
+        -- Срабатываем строго если мяч летит в нашу сторону и вошел в зону досягаемости
+        if dist <= State.BaseParryDistance and isTargetingMe then
             local currentTime = tick()
-            if currentTime - lastParryTick > 0.15 then
+            if currentTime - lastParryTick > 0.08 then
                 lastParryTick = currentTime
-                SimulateKeyPress(Enum.KeyCode.F)
+                TriggerParry()
             end
         end
     end)
 end
 
--- Автофарм с безопасным увеличенным радиусом от мяча и проверкой на 160 стадов
+-- Автофарм
 RunService.RenderStepped:Connect(function()
     if not State.AutoFarm then return end
     
@@ -165,30 +160,19 @@ RunService.RenderStepped:Connect(function()
     local humanoid = GetHumanoid(LocalPlayer)
     if not ball or not root or not humanoid then return end
     
-    local ballPos = ball.Position
-    local rootPos = root.Position
-    local dist = (ballPos - rootPos).Magnitude
+    local dist = (ball.Position - root.Position).Magnitude
+    if dist > 160 then return end
     
-    -- Если мяч дальше 160 стадов или отсутствует, игрок стоит на месте
-    if dist > 160 then
-        return
-    end
-    
-    -- Держимся на безопасном расстоянии от мяча
     if dist < 17 then
-        local escapeDir = (rootPos - ballPos) * Vector3.new(1, 0, 1)
-        if escapeDir.Magnitude > 0 then
-            escapeDir = escapeDir.Unit
-        else
-            escapeDir = Vector3.new(1, 0, 0)
-        end
-        humanoid:MoveTo(ballPos + (escapeDir * 16))
+        local escapeDir = (root.Position - ball.Position) * Vector3.new(1, 0, 1)
+        if escapeDir.Magnitude > 0 then escapeDir = escapeDir.Unit else escapeDir = Vector3.new(1, 0, 0) end
+        humanoid:MoveTo(ball.Position + (escapeDir * 16))
     elseif dist > 20 then
-        humanoid:MoveTo(ballPos + Vector3.new(0, 0, 5))
+        humanoid:MoveTo(ball.Position + Vector3.new(0, 0, 5))
     end
 end)
 
--- Создание купола
+-- Создание купола визуализации
 local DomePart = nil
 local function CreateDome()
     if DomePart then return end
@@ -203,63 +187,40 @@ local function CreateDome()
 end
 
 local function RemoveDome()
-    if DomePart then
-        DomePart:Destroy()
-        DomePart = nil
-    end
+    if DomePart then DomePart:Destroy() DomePart = nil end
 end
 
--- Рендер купола
 RunService.RenderStepped:Connect(function()
-    if not State.Visualizer then
-        RemoveDome()
-        return
-    end
-    
-    if not DomePart then
-        CreateDome()
-    end
+    if not State.Visualizer then RemoveDome() return end
+    if not DomePart then CreateDome() end
     
     local root = GetRootPart(LocalPlayer)
-    if not root then
-        if DomePart then DomePart.Transparency = 1 end
-        return
-    end
+    if not root then return end
     
-    local clampedDist = math.clamp(State.CurrentDynamicDistance, 10, 50)
-    local diameter = clampedDist * 2
-    
+    local diameter = State.BaseParryDistance * 2
     DomePart.Size = Vector3.new(diameter, diameter, diameter)
     DomePart.CFrame = root.CFrame
     
     local currentMat = MaterialsList[State.DomeMaterialIndex]
-    if currentMat then
-        DomePart.Material = currentMat.Material
-    end
+    if currentMat then DomePart.Material = currentMat.Material end
     
     local ball = GetBall()
-    if ball and (ball.Position - root.Position).Magnitude <= clampedDist then
+    if ball and (ball.Position - root.Position).Magnitude <= State.BaseParryDistance then
         DomePart.Color = Color3.fromRGB(255, 50, 50)
         DomePart.Transparency = math.clamp(State.DomeTransparency - 0.15, 0.1, 0.8)
     else
         local currentCol = ColorsList[State.DomeColorIndex]
-        if currentCol then
-            DomePart.Color = currentCol.Color
-        end
+        if currentCol then DomePart.Color = currentCol.Color end
         DomePart.Transparency = State.DomeTransparency
     end
 end)
 
--- ==========================================
--- ИНТЕРФЕЙС И МУЛЬТИЯЗЫЧНОСТЬ
--- ==========================================
-
--- Вкладка: Combat
+-- Интерфейс
 local CombatTab = Hub:CreateTab({EN = "Combat", RU = "Бой"})
 
 CombatTab:AddSection({EN = "Instant Parry", RU = "Aвто-паррирование"})
 
-CombatTab:AddToggle({EN = "Auto Parry", RU = "Авто-паррирование"}, "AutoParry", false, function(s) 
+CombatTab:AddToggle({EN = "Auto Parry (Instant)", RU = "Авто-паррирование (Мгновенное)"}, "AutoParry", false, function(s) 
     State.AutoParry = s 
     if s then StartAutoParry() end 
 end)
@@ -268,96 +229,29 @@ CombatTab:AddToggle({EN = "Legit AutoFarm (Smart Movement)", RU = "Автофа�
     State.AutoFarm = s
 end)
 
-CombatTab:AddSlider({EN = "Base Distance", RU = "Базовая дистанция"}, "BaseParryDistance", 10, 40, 25, function(val) 
+CombatTab:AddSlider({EN = "Parry Distance", RU = "Дистанция отбивания"}, "BaseParryDistance", 10, 50, 30, function(val) 
     State.BaseParryDistance = val 
 end)
 
-CombatTab:AddToggle({EN = "Instant Velocity Prediction", RU = "Предсказание скорости"}, "InstantPrediction", true, function(s) 
-    State.InstantPrediction = s 
-end)
-
 CombatTab:AddSection({EN = "Dome Customization", RU = "Настройка купола"})
-
-CombatTab:AddToggle({EN = "Enable Dome Visualizer", RU = "Включить купол"}, "Visualizer", false, function(s) 
-    State.Visualizer = s 
-end)
-
+CombatTab:AddToggle({EN = "Enable Dome Visualizer", RU = "Включить купол"}, "Visualizer", false, function(s) State.Visualizer = s end)
 CombatTab:AddButton({EN = "Next Color", RU = "Следующий цвет"}, function()
     State.DomeColorIndex = State.DomeColorIndex + 1
     if State.DomeColorIndex > #ColorsList then State.DomeColorIndex = 1 end
 end)
-
 CombatTab:AddButton({EN = "Next Material", RU = "Следующий материал"}, function()
     State.DomeMaterialIndex = State.DomeMaterialIndex + 1
     if State.DomeMaterialIndex > #MaterialsList then State.DomeMaterialIndex = 1 end
 end)
 
-CombatTab:AddSlider({EN = "Transparency", RU = "Прозрачность"}, "DomeTransparency", 10, 90, 35, function(val)
-    local num = tonumber(val) or 35
-    State.DomeTransparency = num / 100
-end)
-
--- Вкладка: Visual (FPS Boost)
 local SettingsTab = Hub:CreateTab({EN = "Visual", RU = "Визуал"})
-
-SettingsTab:AddSection({EN = "Performance & FPS", RU = "Производительность и FPS"})
-
 SettingsTab:AddButton({EN = "Unlock FPS (Max)", RU = "Снять лимит FPS (Максимум)"}, function()
-    if setfpscap then
-        setfpscap(9999)
-        print("[Hub] FPS Unlocked successfully!")
-    else
-        warn("[Hub] setfpscap is not supported by your executor.")
-    end
+    pcall(function() setfpscap(9999) end)
+end)
+SettingsTab:AddToggle({EN = "Safe FPS Booster", RU = "Безопасный буст FPS"}, "FPSBoost", false, function(state)
+    Lighting.GlobalShadows = not state
+    Lighting.FogEnd = state and 999999 or 100000
 end)
 
-SettingsTab:AddToggle({EN = "FPS Booster (Remove Effects)", RU = "Буст FPS (Убрать эффекты)"}, "FPSBoost", false, function(state)
-    State.FPSBoost = state
-    if state then
-        Lighting.GlobalShadows = false
-        Lighting.FogEnd = 999999
-        for _, v in ipairs(Lighting:GetChildren()) do
-            if v:IsA("PostEffect") then
-                v.Enabled = false
-            elseif v:IsA("Sky") then
-                v:Destroy()
-            end
-        end
-        for _, v in ipairs(Workspace:GetDescendants()) do
-            if v.Name ~= "BladeBallVisualDome" then
-                if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Fire") or v:IsA("Smoke") or v:IsA("Sparkles") then
-                    v.Enabled = false
-                elseif v:IsA("BasePart") then
-                    v.Material = Enum.Material.SmoothPlastic
-                    v.CastShadow = false
-                end
-            end
-        end
-        print("[Hub] FPS Booster enabled!")
-    else
-        Lighting.GlobalShadows = true
-        print("[Hub] FPS Booster disabled.")
-    end
-end)
-
--- Вкладка: Social (Социальные сети)
 local SocialTab = Hub:CreateTab({EN = "Social", RU = "Социальные сети"})
-
-SocialTab:AddSection({EN = "Community Links", RU = "Ссылки на сообщество"})
-
-SocialTab:AddLabel({
-    EN = "Join our Telegram channel https://t.me/BloxyScripts", 
-    RU = "Подписывайтесь на наш Telegram-канал https://t.me/BloxyScripts"
-})
-
-SocialTab:AddButton({EN = "Copy Telegram Link", RU = "Скопировать ссылку на Telegram"}, function()
-    local success = pcall(function()
-        setclipboard("https://t.me/BloxyScripts")
-    end)
-    
-    if success then
-        print("[Hub] Telegram link copied to clipboard!")
-    else
-        warn("[Hub] setclipboard is not supported by your executor.")
-    end
-end)
+SocialTab:AddLabel({EN = "Join our Telegram channel https://t.me/BloxyScripts", RU = "Подписывайтесь на наш Telegram-канал https://t.me/BloxyScripts"})
