@@ -4,7 +4,7 @@ local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/TheBl
 -- 2. Создание главного окна хаба
 local Window = Library:CreateWindow({
     Name = "BloxyScripts | Hub",
-    LoadingTitle = "Загрузка модулей...",
+    LoadingTitle = "Loading...",
     LoadingSubtitle = "by BloxyScripts (Telegram)",
     FolderName = "MurderDuels"
 })
