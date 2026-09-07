@@ -203,7 +203,7 @@ end)
 
 FarmTab:AddSection({EN = "Auto Win", RU = "Авто-победа"})
 
-FarmTab:AddToggle({EN = "Enable Auto Win (118Qa)", RU = "Включить авто-победу (118Qa)"}, "AutoWinKey", false, function(state)
+FarmTab:AddToggle({EN = "Enable Auto Win", RU = "Включить авто-победу"}, "AutoWinKey", false, function(state)
     State.AutoWin = state
 end)
 
