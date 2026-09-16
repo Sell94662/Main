@@ -9,6 +9,9 @@ local ClickPower=RS:WaitForChild("PowerRemotes"):WaitForChild("ClickPower")
 
 local mogFarm=false
 local appealFarm=false
+local mogThread=nil
+local appealThread=nil
+local savedCFrame=nil
 
 local function root()
 	local c=LP.Character
@@ -80,17 +83,17 @@ local function mogFarmLoop()
 	while mogFarm do
 		local r=root()
 		if r then
-			for _,v in ipairs(beaten()) do
-				if not mogFarm then break end
+			local list=beaten()
+			for _,v in ipairs(list) do
+				if not mogFarm then return end
 				r.CFrame=v.CFrame
 				task.wait()
 			end
-			if mogFarm then
-				local cf=getWinPad()
-				if cf then
-					r.CFrame=cf
-					task.wait()
-				end
+			if not mogFarm then return end
+			local cf=getWinPad()
+			if cf then
+				r.CFrame=cf
+				task.wait()
 			end
 		end
 		task.wait()
@@ -113,7 +116,7 @@ local frame=Instance.new("Frame")
 frame.Size=UDim2.fromOffset(230,145)
 frame.Position=UDim2.new(0,15,0.5,-72)
 frame.BackgroundColor3=Color3.fromRGB(20,20,25)
-frame.Active=true
+frame.Active=false
 frame.Parent=gui
 
 local corner=Instance.new("UICorner")
@@ -137,7 +140,7 @@ local credit=Instance.new("TextLabel")
 credit.Size=UDim2.fromOffset(100,15)
 credit.Position=UDim2.new(1,-105,1,-18)
 credit.BackgroundTransparency=1
-credit.Text="by criminalsafety"
+credit.Text="by https://t.me/BloxyScripts"
 credit.TextColor3=Color3.fromRGB(120,120,130)
 credit.TextSize=9
 credit.Font=Enum.Font.Gotham
@@ -153,6 +156,7 @@ local function button(y,text,callback)
 	b.TextColor3=Color3.new(1,1,1)
 	b.TextSize=14
 	b.Font=Enum.Font.GothamBold
+	b.AutoButtonColor=false
 	b.Parent=frame
 	local c=Instance.new("UICorner")
 	c.CornerRadius=UDim.new(0,8)
@@ -163,25 +167,38 @@ local function button(y,text,callback)
 	return b
 end
 
-button(35,"Mog Farm",function(b)
+button(35,"Farm Wins",function(b)
 	mogFarm=not mogFarm
 	b.Text="Farm Wins  "..(mogFarm and "ON" or "OFF")
 	b.BackgroundColor3=mogFarm and Color3.fromRGB(35,130,65) or Color3.fromRGB(45,45,52)
-	if mogFarm then task.spawn(mogFarmLoop) end
+	if mogFarm then
+		local r=root()
+		if r then savedCFrame=r.CFrame end
+		if mogThread then pcall(task.cancel, mogThread) end
+		mogThread=task.spawn(mogFarmLoop)
+	else
+		if savedCFrame then
+			local r=root()
+			if r then r.CFrame=savedCFrame end
+		end
+	end
 end)
 
 button(80,"Appeal Farm",function(b)
 	appealFarm=not appealFarm
 	b.Text="Appeal Farm  "..(appealFarm and "ON" or "OFF")
 	b.BackgroundColor3=appealFarm and Color3.fromRGB(35,130,65) or Color3.fromRGB(45,45,52)
-	if appealFarm then task.spawn(appealFarmLoop) end
+	if appealFarm then
+		if appealThread then pcall(task.cancel, appealThread) end
+		appealThread=task.spawn(appealFarmLoop)
+	end
 end)
 
 local dragging=false
 local dragStart
 local startPos
 
-frame.InputBegan:Connect(function(input)
+title.InputBegan:Connect(function(input)
 	if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
 		dragging=true
 		dragStart=input.Position
@@ -189,15 +206,15 @@ frame.InputBegan:Connect(function(input)
 	end
 end)
 
-frame.InputEnded:Connect(function(input)
-	if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
-		dragging=false
-	end
-end)
-
 game:GetService("UserInputService").InputChanged:Connect(function(input)
 	if dragging and (input.UserInputType==Enum.UserInputType.MouseMovement or input.UserInputType==Enum.UserInputType.Touch) then
 		local delta=input.Position-dragStart
 		frame.Position=UDim2.new(startPos.X.Scale,startPos.X.Offset+delta.X,startPos.Y.Scale,startPos.Y.Offset+delta.Y)
+	end
+end)
+
+game:GetService("UserInputService").InputEnded:Connect(function(input)
+	if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then
+		dragging=false
 	end
 end)
