@@ -10,7 +10,7 @@ local oldClicker = pg:FindFirstChild("HiddenClicker")
 if oldClicker then oldClicker:Destroy() end
 
 -- ============================================================
--- 1. НЕВИДИМАЯ КНОПКА (Клик по координатам)
+-- 1. НЕВИДИМАЯ КНОПКА
 -- ============================================================
 local clickGui = Instance.new("ScreenGui")
 clickGui.Name = "HiddenClicker"
@@ -58,7 +58,6 @@ Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
 -- ============================================================
 local OFFSET_X = 3
 local OFFSET_Z = 3
-local STABILIZE_DELAY = 0.3
 
 local activePlatform = nil
 local autoFarmEnabled = false
@@ -94,18 +93,6 @@ local function findChest()
     return nil, nil
 end
 
-local function performClick()
-    -- Клик 1: Эмуляция мыши
-    pcall(function()
-        VirtualInputManager:SendMouseButtonEvent(535, 454, 0, true, game, 0)
-        VirtualInputManager:SendMouseButtonEvent(535, 454, 0, false, game, 0)
-    end)
-    -- Клик 2: Невидимая кнопка
-    pcall(function()
-        hiddenBtn:Activate()
-    end)
-end
-
 -- ============================================================
 -- 5. ЛОГИКА
 -- ============================================================
@@ -115,35 +102,46 @@ btn.MouseButton1Click:Connect(function()
         btn.Text = "AutoFarm: ON"
         btn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
         
-        -- ПОТОК 1: Бесконечные клики (не останавливается никогда)
+        -- ПОТОК 1: АБСОЛЮТНО БЕСКОНЕЧНЫЕ КЛИКИ (В pcall чтобы игра не крашила поток)
         task.spawn(function()
             while autoFarmEnabled do
-                performClick()
-                task.wait(0.05) -- Скорость кликов (0.05 = 20 кликов в секунду)
+                -- Клик мышкой
+                pcall(function()
+                    VirtualInputManager:SendMouseButtonEvent(535, 454, 0, true, game, 0)
+                    task.wait(0.01)
+                    VirtualInputManager:SendMouseButtonEvent(535, 454, 0, false, game, 0)
+                end)
+                -- Клик невидимой кнопкой
+                pcall(function()
+                    hiddenBtn:Activate()
+                end)
+                
+                task.wait(0.05) -- Пауза 0.05 сек
             end
         end)
 
-        -- ПОТОК 2: Телепорт каждые 4 секунды
+        -- ПОТОК 2: ТЕЛЕПОРТ КАЖДЫЕ 4 СЕКУНДЫ
         task.spawn(function()
             while autoFarmEnabled do
-                local chest, pos = findChest()
-                if chest and pos then
-                    local char = player.Character
-                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                    
-                    if hrp then
-                        createInvisiblePlatform(pos)
-                        local targetPos = Vector3.new(pos.X + OFFSET_X, pos.Y + 2, pos.Z + OFFSET_Z)
-                        hrp.CFrame = CFrame.new(targetPos)
+                pcall(function()
+                    local chest, pos = findChest()
+                    if chest and pos then
+                        local char = player.Character
+                        local hrp = char and char:FindFirstChild("HumanoidRootPart")
                         
-                        -- Пытаемся нажать на сундук
-                        for _, d in ipairs(chest:GetDescendants()) do
-                            if d:IsA("ClickDetector") then pcall(function() fireclickdetector(d) end) end
-                            if d:IsA("ProximityPrompt") then pcall(function() fireproximityprompt(d) end) end
+                        if hrp then
+                            createInvisiblePlatform(pos)
+                            local targetPos = Vector3.new(pos.X + OFFSET_X, pos.Y + 2, pos.Z + OFFSET_Z)
+                            hrp.CFrame = CFrame.new(targetPos)
+                            
+                            for _, d in ipairs(chest:GetDescendants()) do
+                                if d:IsA("ClickDetector") then fireclickdetector(d) end
+                                if d:IsA("ProximityPrompt") then fireproximityprompt(d) end
+                            end
                         end
                     end
-                end
-                task.wait(4) -- Ждем ровно 4 секунды перед следующим телепортом
+                end)
+                task.wait(4) -- Ждем ровно 4 секунды
             end
         end)
         
