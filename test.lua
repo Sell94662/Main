@@ -10,7 +10,7 @@ local oldClicker = pg:FindFirstChild("HiddenClicker")
 if oldClicker then oldClicker:Destroy() end
 
 -- ============================================================
--- 1. НЕВИДИМАЯ КНОПКА
+-- 1. НЕВИДИМАЯ КНОПКА (Клик по координатам)
 -- ============================================================
 local clickGui = Instance.new("ScreenGui")
 clickGui.Name = "HiddenClicker"
@@ -56,15 +56,12 @@ Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
 -- ============================================================
 -- 3. НАСТРОЙКИ
 -- ============================================================
-local CLICK_INTERVAL = 0.1
 local OFFSET_X = 3
 local OFFSET_Z = 3
 local STABILIZE_DELAY = 0.3
-local RESCAN_DELAY = 1
 
 local activePlatform = nil
 local autoFarmEnabled = false
-local currentChest = nil -- Чтобы не кликать бесконечно по одному и тому же
 
 -- ============================================================
 -- 4. ФУНКЦИИ
@@ -85,8 +82,7 @@ end
 
 local function findChest()
     for _, obj in ipairs(workspace:GetDescendants()) do
-        -- Ищем сундук, пропуская тот, который уже кликаем
-        if obj.Name == "ClickerChest" and obj.Parent and obj ~= currentChest then
+        if obj.Name == "ClickerChest" and obj.Parent then
             local ok, pos = pcall(function()
                 if obj:IsA("Model") and obj.PrimaryPart then return obj.PrimaryPart.Position end
                 if obj:IsA("BasePart") then return obj.Position end
@@ -99,78 +95,58 @@ local function findChest()
 end
 
 local function performClick()
+    -- Клик 1: Эмуляция мыши
     pcall(function()
         VirtualInputManager:SendMouseButtonEvent(535, 454, 0, true, game, 0)
-        task.wait(0.01)
         VirtualInputManager:SendMouseButtonEvent(535, 454, 0, false, game, 0)
     end)
+    -- Клик 2: Невидимая кнопка
     pcall(function()
         hiddenBtn:Activate()
     end)
 end
 
-local function processChest(chest, chestPos)
-    currentChest = chest -- Запоминаем, что мы на этом сундуке
-    
-    local char = player.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
-
-    -- 1. Телепорт
-    createInvisiblePlatform(chestPos)
-    local targetPos = Vector3.new(chestPos.X + OFFSET_X, chestPos.Y + 2, chestPos.Z + OFFSET_Z)
-    hrp.CFrame = CFrame.new(targetPos)
-    task.wait(STABILIZE_DELAY)
-
-    -- 2. 11 кликов
-    for i = 1, 11 do
-        if not autoFarmEnabled then break end
-        performClick()
-        task.wait(0.05)
-    end
-
-    -- 3. Кликаем по сундуку 3 секунды, затем ищем следующий
-    local timer = 0
-    while chest and chest.Parent and autoFarmEnabled and timer < 3 do
-        for _, d in ipairs(chest:GetDescendants()) do
-            if d:IsA("ClickDetector") then pcall(function() fireclickdetector(d) end) end
-            if d:IsA("ProximityPrompt") then pcall(function() fireproximityprompt(d) end) end
-            if d:IsA("RemoteEvent") then pcall(function() d:FireServer(chest) end) end
-        end
-        task.wait(CLICK_INTERVAL)
-        timer = timer + CLICK_INTERVAL
-    end
-
-    if activePlatform then 
-        activePlatform:Destroy() 
-        activePlatform = nil 
-    end
-end
-
 -- ============================================================
--- 5. ГЛАВНЫЙ ЦИКЛ
+-- 5. ЛОГИКА
 -- ============================================================
 btn.MouseButton1Click:Connect(function()
     autoFarmEnabled = not autoFarmEnabled
     if autoFarmEnabled then
         btn.Text = "AutoFarm: ON"
         btn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
-        currentChest = nil -- Сбрасываем при включении
         
+        -- ПОТОК 1: Бесконечные клики (не останавливается никогда)
+        task.spawn(function()
+            while autoFarmEnabled do
+                performClick()
+                task.wait(0.05) -- Скорость кликов (0.05 = 20 кликов в секунду)
+            end
+        end)
+
+        -- ПОТОК 2: Телепорт каждые 4 секунды
         task.spawn(function()
             while autoFarmEnabled do
                 local chest, pos = findChest()
                 if chest and pos then
-                    processChest(chest, pos)
-                    -- Сбрасываем текущий сундук, чтобы он мог найти его снова (если других нет)
-                    currentChest = nil 
-                    task.wait(0.5) -- Пауза перед поиском следующего
-                else
-                    task.wait(RESCAN_DELAY)
+                    local char = player.Character
+                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                    
+                    if hrp then
+                        createInvisiblePlatform(pos)
+                        local targetPos = Vector3.new(pos.X + OFFSET_X, pos.Y + 2, pos.Z + OFFSET_Z)
+                        hrp.CFrame = CFrame.new(targetPos)
+                        
+                        -- Пытаемся нажать на сундук
+                        for _, d in ipairs(chest:GetDescendants()) do
+                            if d:IsA("ClickDetector") then pcall(function() fireclickdetector(d) end) end
+                            if d:IsA("ProximityPrompt") then pcall(function() fireproximityprompt(d) end) end
+                        end
+                    end
                 end
+                task.wait(4) -- Ждем ровно 4 секунды перед следующим телепортом
             end
         end)
+        
     else
         btn.Text = "AutoFarm: OFF"
         btn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
