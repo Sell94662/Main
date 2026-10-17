@@ -1,4 +1,5 @@
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local player = Players.LocalPlayer
 local pg = player:WaitForChild("PlayerGui")
@@ -10,7 +11,7 @@ local oldClicker = pg:FindFirstChild("HiddenClicker")
 if oldClicker then oldClicker:Destroy() end
 
 -- ============================================================
--- 1. НЕВИДИМАЯ КНОПКА
+-- 1. НЕВИДИМАЯ КНОПКА (Для второго способа клика)
 -- ============================================================
 local clickGui = Instance.new("ScreenGui")
 clickGui.Name = "HiddenClicker"
@@ -61,6 +62,7 @@ local OFFSET_Z = 3
 
 local activePlatform = nil
 local autoFarmEnabled = false
+local clickConnection = nil -- Связь с RenderStepped
 
 -- ============================================================
 -- 4. ФУНКЦИИ
@@ -102,25 +104,18 @@ btn.MouseButton1Click:Connect(function()
         btn.Text = "AutoFarm: ON"
         btn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
         
-        -- ПОТОК 1: АБСОЛЮТНО БЕСКОНЕЧНЫЕ КЛИКИ (В pcall чтобы игра не крашила поток)
-        task.spawn(function()
-            while autoFarmEnabled do
-                -- Клик мышкой
-                pcall(function()
-                    VirtualInputManager:SendMouseButtonEvent(535, 454, 0, true, game, 0)
-                    task.wait(0.01)
-                    VirtualInputManager:SendMouseButtonEvent(535, 454, 0, false, game, 0)
-                end)
-                -- Клик невидимой кнопкой
-                pcall(function()
-                    hiddenBtn:Activate()
-                end)
-                
-                task.wait(0.05) -- Пауза 0.05 сек
-            end
+        -- ПОТОК КЛИКОВ (Каждый кадр, остановить невозможно)
+        clickConnection = RunService.RenderStepped:Connect(function()
+            pcall(function()
+                VirtualInputManager:SendMouseButtonEvent(535, 454, 0, true, game, 0)
+                VirtualInputManager:SendMouseButtonEvent(535, 454, 0, false, game, 0)
+            end)
+            pcall(function()
+                hiddenBtn:Activate()
+            end)
         end)
 
-        -- ПОТОК 2: ТЕЛЕПОРТ КАЖДЫЕ 4 СЕКУНДЫ
+        -- ПОТОК ТЕЛЕПОРТА (Каждые 4 секунды)
         task.spawn(function()
             while autoFarmEnabled do
                 pcall(function()
@@ -148,6 +143,13 @@ btn.MouseButton1Click:Connect(function()
     else
         btn.Text = "AutoFarm: OFF"
         btn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+        
+        -- Отключаем клики
+        if clickConnection then
+            clickConnection:Disconnect()
+            clickConnection = nil
+        end
+        
         if activePlatform then 
             activePlatform:Destroy() 
             activePlatform = nil 
