@@ -41,7 +41,7 @@ local LocalPlayer = Players.LocalPlayer
 -- ==========================================================
 local START_POSITION    = Vector3.new(41.48, -12.09, -35.71)
 local CHEST_POSITION    = Vector3.new(0, 50, 9550)
-local FLY_HEIGHT_OFFSET = 10
+local FLY_HEIGHT_OFFSET = 50
 local ARRIVE_DISTANCE   = 12
 local CHEST_WAIT_TIME   = 2.5
 local RESPAWN_WAIT_TIME = 2
