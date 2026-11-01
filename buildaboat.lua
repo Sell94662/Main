@@ -1,5 +1,5 @@
 -- ==========================================================
--- BloxyScripts Hub | Модуль АвтоФарм (Final Fix)
+-- BloxyScripts Hub | Модуль АвтоФарм (Final Tuned)
 -- ==========================================================
 
 print("[BloxyScripts Hub] Загрузка модуля АвтоФарм...")
@@ -36,16 +36,16 @@ local CHEST_X = -46.42
 local CHEST_Z = 9502.53
 local CHEST_Y = -353.53 
 
-local FLIGHT_ALTITUDE   = 120  -- Жестко заданная высота (макс 120)
+local FLIGHT_ALTITUDE   = 100  -- Значение по умолчанию
 local CHEST_ZONE_RADIUS = 20   
-local TOUCH_DISTANCE    = 0    
+local TOUCH_DISTANCE    = -4   -- ОПУСКАЕМ ЧУТЬ НИЖЕ, чтобы ноги касались сундука
 
 -- ==========================================================
 -- СОСТОЯНИЕ
 -- ==========================================================
 local autoFarmActive   = false
 local flightSpeed      = 500  
-local dropSpeed        = 150   -- Плавная скорость падения
+local dropSpeed        = 150   
 local chestYOffset     = 0     
 local farmThread       = nil
 local noclipConnection = nil
@@ -125,7 +125,7 @@ local function startFarmLoop()
 
             if not autoFarmActive then break end
 
-            -- 2) ВЗЛЕТ (Арка: часть 1)
+            -- 2) ВЗЛЕТ
             local upTarget = Vector3.new(START_POSITION.X, flightY, START_POSITION.Z)
             while autoFarmActive do
                 local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -145,7 +145,7 @@ local function startFarmLoop()
             if not autoFarmActive then break end
             task.wait(0.1)
 
-            -- 3) ПОЛЕТ ПО ПРЯМОЙ (Арка: часть 2)
+            -- 3) ПОЛЕТ ПО ПРЯМОЙ
             local overTarget = Vector3.new(CHEST_X, flightY, CHEST_Z)
             while autoFarmActive do
                 local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -160,21 +160,20 @@ local function startFarmLoop()
                 local dt = RunService.Heartbeat:Wait()
                 local dir = Vector3.new(overTarget.X - r.Position.X, 0, overTarget.Z - r.Position.Z).Unit
                 r.CFrame = r.CFrame + (dir * (flightSpeed * dt))
-                -- Жестко держим высоту
                 r.CFrame = CFrame.new(r.Position.X, flightY, r.Position.Z)
             end
 
             if not autoFarmActive then break end
-            task.wait(0.2) -- Пауза для стабилизации физики
+            task.wait(0.1)
 
-            -- 4) ПЛАВНЫЙ СПУСК (Арка: часть 3)
+            -- 4) ПЛАВНЫЙ СПУСК
             char, root, hum = getCharacter(5)
             if root then
-                -- Выравниваем ровно над сундуком и ОБНУЛЯЕМ скорость
                 root.CFrame = CFrame.new(CHEST_X, flightY, CHEST_Z)
                 freezeRoot(root)
-                task.wait(0.2)
+                task.wait(0.1)
 
+                -- Используем TOUCH_DISTANCE (-4), чтобы опустить персонажа к сундуку
                 local targetY = currentChestY + TOUCH_DISTANCE
                 
                 while autoFarmActive do
@@ -187,25 +186,26 @@ local function startFarmLoop()
                     end
 
                     local dt = RunService.Heartbeat:Wait()
-                    -- Плавное вычитание высоты
                     local newY = math.max(r.Position.Y - (dropSpeed * dt), targetY)
                     r.CFrame = CFrame.new(CHEST_X, newY, CHEST_Z)
-                    freezeRoot(r) -- Держим нулевую скорость, чтобы не было инерции
+                    freezeRoot(r)
                 end
             end
 
             if not autoFarmActive then break end
 
-            -- 5) КАСАНИЕ И РЕСЕТ
+            -- 5) ФИКСАЦИЯ И РЕСЕТ (Задержка ровно 1 секунда)
             char, root, hum = getCharacter(5)
             if root and hum then
                 root.CFrame = CFrame.new(CHEST_X, currentChestY + TOUCH_DISTANCE, CHEST_Z)
-                task.wait(2.5)
+                freezeRoot(root)
+                
+                task.wait(1) -- Ждем 1 секунду на сундуке, как ты просил
 
                 if hum and hum.Health > 0 then
                     hum.Health = 0
                 end
-                task.wait(2)
+                task.wait(1.5) -- Пауза на респавн
             end
         else
             task.wait(0.5)
@@ -216,7 +216,7 @@ local function startFarmLoop()
 end
 
 -- ==========================================================
--- UI (Сменил ключи конфига на V4, чтобы сбросить старые настройки)
+-- UI (Значения по умолчанию изменены под твои скриншоты)
 -- ==========================================================
 local Tab = Window:CreateTab({ EN = "Auto Farm", RU = "Автофарм" }, 10)
 
@@ -224,35 +224,35 @@ Tab:AddSection({ EN = "Flight Settings", RU = "Настройки полета" 
 
 Tab:AddSlider(
     { EN = "Flight Speed", RU = "Скорость полёта" },
-    "AutoFarmSpeedV4", 
-    100, 500, 300,
+    "AutoFarmSpeedV5", 
+    100, 500, 500, -- По умолчанию 500
     function(value) flightSpeed = value end
 )
 
 Tab:AddSlider(
     { EN = "Flight Altitude", RU = "Высота полета (Y)" },
-    "FlightAltV4", 
-    50, 120, 120, 
+    "FlightAltV5", 
+    50, 120, 100, -- По умолчанию 100
     function(value) FLIGHT_ALTITUDE = value end
 )
 
 Tab:AddSlider(
     { EN = "Fall Speed", RU = "Скорость падения" },
-    "FallSpeedV4", 
-    20, 150, 50, 
+    "FallSpeedV5", 
+    20, 150, 150, -- По умолчанию 150
     function(value) dropSpeed = value end
 )
 
 Tab:AddSlider(
     { EN = "Chest Y Offset", RU = "Коррекция высоты сундука" },
-    "ChestYOffsetV4", 
-    -20, 20, 0,
+    "ChestYOffsetV5", 
+    -20, 20, 0, -- По умолчанию 0
     function(value) chestYOffset = value end
 )
 
 Tab:AddToggle(
     { EN = "Enable Auto Farm", RU = "Включить автофарм" },
-    "AutoFarmToggleV4", 
+    "AutoFarmToggleV5", 
     false,
     function(state)
         autoFarmActive = state
@@ -294,7 +294,7 @@ end)
 Tab:AddButton({ EN = "Teleport to Chest", RU = "Телепорт к сундуку" }, function()
     local char = LocalPlayer.Character
     if char and char:FindFirstChild("HumanoidRootPart") then
-        local targetY = CHEST_Y + chestYOffset + 3
+        local targetY = CHEST_Y + chestYOffset - 4
         char.HumanoidRootPart.CFrame = CFrame.new(CHEST_X, targetY, CHEST_Z)
     end
 end)
