@@ -1,5 +1,5 @@
 -- ==========================================================
--- BloxyScripts Hub | Модуль АвтоФарм (Arch Flight Version)
+-- BloxyScripts Hub | Модуль АвтоФарм (Smooth Version)
 -- ==========================================================
 
 print("[BloxyScripts Hub] Загрузка модуля АвтоФарм...")
@@ -36,21 +36,20 @@ local LocalPlayer = Players.LocalPlayer
 -- ==========================================================
 local START_POSITION = Vector3.new(41.48, -12.09, -35.71)
 
--- Твои точные координаты сундука
 local CHEST_X = -46.42
 local CHEST_Z = 9502.53
 local CHEST_Y = -353.53 
 
-local FLIGHT_ALTITUDE   = 500  -- Высота полета (Y), чтобы перелететь все стены
+local FLIGHT_ALTITUDE   = 120  -- Высота полета (макс 120)
 local CHEST_ZONE_RADIUS = 20   -- Радиус зоны, где начинаем снижаться
-local TOUCH_DISTANCE    = 3    -- Отступ от сундука, чтобы не застрять
+local TOUCH_DISTANCE    = 3    -- Отступ от сундука
 
 -- ==========================================================
 -- СОСТОЯНИЕ
 -- ==========================================================
 local autoFarmActive   = false
-local flightSpeed      = 300  -- Увеличил скорость для быстрого пролета
-local dropSpeed        = 200  -- Скорость падения вниз
+local flightSpeed      = 300  -- Скорость горизонтального полета
+local dropSpeed        = 50   -- Скорость падения (сделал плавнее)
 local chestYOffset     = 0     
 local farmThread       = nil
 local noclipConnection = nil
@@ -105,7 +104,7 @@ local function getCharacter(timeout)
 end
 
 -- ==========================================================
--- ОСНОВНОЙ ЦИКЛ АВТОФАРМА (МЕТОД АРКИ)
+-- ОСНОВНОЙ ЦИКЛ АВТОФАРМА (ПЛАВНАЯ АРКА)
 -- ==========================================================
 local function startFarmLoop()
     enableNoClip()
@@ -123,7 +122,7 @@ local function startFarmLoop()
 
             if not autoFarmActive then break end
 
-            -- 2) ВЗЛЕТ В НЕБО (Арка: часть 1)
+            -- 2) ПЛАВНЫЙ ВЗЛЕТ (Арка: часть 1)
             local upTarget = Vector3.new(START_POSITION.X, flightY, START_POSITION.Z)
             while autoFarmActive do
                 local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -134,13 +133,13 @@ local function startFarmLoop()
 
                 local dt = RunService.Heartbeat:Wait()
                 local dir = (upTarget - r.Position).Unit
-                r.CFrame = r.CFrame + (dir * (flightSpeed * 1.5 * dt))
+                r.CFrame = r.CFrame + (dir * (flightSpeed * dt)) -- Взлет с той же скоростью
             end
 
             if not autoFarmActive then break end
             task.wait(0.1)
 
-            -- 3) ПОЛЕТ ПО ПРЯМОЙ НАД КАРТОЙ (Арка: часть 2)
+            -- 3) ПОЛЕТ ПО ПРЯМОЙ (Арка: часть 2)
             local overTarget = Vector3.new(CHEST_X, flightY, CHEST_Z)
             while autoFarmActive do
                 local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -150,28 +149,26 @@ local function startFarmLoop()
                 if dist <= CHEST_ZONE_RADIUS then break end
 
                 local dt = RunService.Heartbeat:Wait()
-                -- Двигаемся строго по горизонтали
                 local dir = Vector3.new(overTarget.X - r.Position.X, 0, overTarget.Z - r.Position.Z).Unit
                 r.CFrame = r.CFrame + (dir * (flightSpeed * dt))
-                -- Жестко фиксируем высоту
                 r.CFrame = CFrame.new(r.Position.X, flightY, r.Position.Z)
             end
 
             if not autoFarmActive then break end
             task.wait(0.1)
 
-            -- 4) СПУСК ВНИЗ К СУНДУКУ (Арка: часть 3)
-            local downTarget = Vector3.new(CHEST_X, currentChestY + TOUCH_DISTANCE, CHEST_Z)
+            -- 4) ПЛАВНЫЙ СПУСК (Арка: часть 3)
+            local targetY = currentChestY + TOUCH_DISTANCE
             while autoFarmActive do
                 local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
                 if not r then break end
                 
-                local dist = (downTarget - r.Position).Magnitude
-                if dist <= 3 then break end
+                -- Спускаемся строго по вертикали, чтобы не было рывков в стороны
+                if r.Position.Y <= targetY then break end
 
                 local dt = RunService.Heartbeat:Wait()
-                local dir = (downTarget - r.Position).Unit
-                r.CFrame = r.CFrame + (dir * (dropSpeed * dt))
+                local newY = math.max(r.Position.Y - (dropSpeed * dt), targetY)
+                r.CFrame = CFrame.new(CHEST_X, newY, CHEST_Z)
             end
 
             if not autoFarmActive then break end
@@ -179,7 +176,7 @@ local function startFarmLoop()
             -- 5) КАСАНИЕ И РЕСЕТ
             char, root, hum = getCharacter(5)
             if root and hum then
-                root.CFrame = CFrame.new(CHEST_X, currentChestY + TOUCH_DISTANCE, CHEST_Z)
+                root.CFrame = CFrame.new(CHEST_X, targetY, CHEST_Z)
                 task.wait(2.5) -- Ждем награду
 
                 if hum and hum.Health > 0 then
@@ -200,7 +197,7 @@ end
 -- ==========================================================
 local Tab = Window:CreateTab({ EN = "Auto Farm", RU = "Автофарм" }, 10)
 
-Tab:AddSection({ EN = "Gold Farm Settings", RU = "Настройки фарма" })
+Tab:AddSection({ EN = "Flight Settings", RU = "Настройки полета" })
 
 Tab:AddSlider(
     { EN = "Flight Speed", RU = "Скорость полёта" },
@@ -212,8 +209,15 @@ Tab:AddSlider(
 Tab:AddSlider(
     { EN = "Flight Altitude", RU = "Высота полета (Y)" },
     "FlightAltitudeKey",
-    200, 1000, 500,
+    50, 120, 120,  -- Ограничил максимум 120
     function(value) FLIGHT_ALTITUDE = value end
+)
+
+Tab:AddSlider(
+    { EN = "Fall Speed", RU = "Скорость падения" },
+    "FallSpeedKey",
+    20, 150, 50,   -- Новая настройка для плавного спуска
+    function(value) dropSpeed = value end
 )
 
 Tab:AddSlider(
