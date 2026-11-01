@@ -38,14 +38,14 @@ local CHEST_Y = -353.53
 
 local FLIGHT_ALTITUDE   = 120  -- Жестко заданная высота (макс 120)
 local CHEST_ZONE_RADIUS = 20   
-local TOUCH_DISTANCE    = 3    
+local TOUCH_DISTANCE    = 0    
 
 -- ==========================================================
 -- СОСТОЯНИЕ
 -- ==========================================================
 local autoFarmActive   = false
-local flightSpeed      = 300  
-local dropSpeed        = 50   -- Плавная скорость падения
+local flightSpeed      = 500  
+local dropSpeed        = 150   -- Плавная скорость падения
 local chestYOffset     = 0     
 local farmThread       = nil
 local noclipConnection = nil
