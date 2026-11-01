@@ -1,5 +1,5 @@
 -- ==========================================================
--- BloxyScripts Hub | Модуль АвтоФарм (V6 Final)
+-- BloxyScripts Hub | Модуль АвтоФарм (V7 - Wait & Claim)
 -- ==========================================================
 
 print("[BloxyScripts Hub] Загрузка модуля АвтоФарм...")
@@ -47,6 +47,7 @@ local autoFarmActive   = false
 local flightSpeed      = 500  
 local dropSpeed        = 150   
 local chestYOffset     = 0     
+local waitTime         = 5     -- Ждем 5 секунд на сундуке
 local farmThread       = nil
 local noclipConnection = nil
 
@@ -170,34 +171,49 @@ local function startFarmLoop()
 
                 local dt = RunService.Heartbeat:Wait()
                 local newY = math.max(r.Position.Y - (dropSpeed * dt), targetY)
-                -- Принудительно ставим ровно, чтобы не крутило
                 r.CFrame = CFrame.new(CHEST_X, newY, CHEST_Z)
                 freezeRoot(r)
             end
 
             if not autoFarmActive then break end
 
-            -- 5) ЖЕСТКАЯ ФИКСАЦИЯ В СУНДУКЕ (1 СЕКУНДА)
+            -- 5) УДЕРЖАНИЕ И ОЖИДАНИЕ НАГРАДЫ
             char, root, hum = getCharacter(5)
             if root and hum then
                 local touchCFrame = CFrame.new(CHEST_X, currentChestY + TOUCH_DISTANCE, CHEST_Z)
                 local timer = 0
                 
-                -- Держим персонажа внутри сундука ровно 1 секунду
-                while timer < 1 do
+                -- Держим персонажа в сундуке, пока не истечет время waitTime
+                while timer < waitTime and autoFarmActive do
                     if not root or not root.Parent then break end
-                    root.CFrame = touchCFrame -- жестко фиксируем
+                    root.CFrame = touchCFrame
                     freezeRoot(root)
+
+                    -- Авто-клик по кнопке "Claim" (если появилась)
+                    pcall(function()
+                        for _, gui in pairs(game:GetService("CoreGui"):GetDescendants()) do
+                            if gui:IsA("TextButton") and string.lower(gui.Text):find("claim") then
+                                gui:FireMouseClick()
+                            end
+                        end
+                        for _, gui in pairs(LocalPlayer.PlayerGui:GetDescendants()) do
+                            if gui:IsA("TextButton") and string.lower(gui.Text):find("claim") then
+                                gui:FireMouseClick()
+                            end
+                        end
+                    end)
                     
                     local dt = RunService.Heartbeat:Wait()
                     timer = timer + dt
                 end
 
-                -- Ресет
+                if not autoFarmActive then break end
+
+                -- 6) РЕСЕТ ПОСЛЕ ОЖИДАНИЯ
                 if hum and hum.Health > 0 then
                     hum.Health = 0
                 end
-                task.wait(1.5) -- Ждем респавна
+                task.wait(2) -- Пауза перед новым кругом
             end
         else
             task.wait(0.5)
@@ -208,7 +224,7 @@ local function startFarmLoop()
 end
 
 -- ==========================================================
--- UI (Новые ключи V6 для сброса старых настроек)
+-- UI (Ключи V7)
 -- ==========================================================
 local Tab = Window:CreateTab({ EN = "Auto Farm", RU = "Автофарм" }, 10)
 
@@ -216,35 +232,43 @@ Tab:AddSection({ EN = "Flight Settings", RU = "Настройки полета" 
 
 Tab:AddSlider(
     { EN = "Flight Speed", RU = "Скорость полёта" },
-    "AutoFarmSpeed_V6", 
-    100, 500, 500, -- Дефолт 500
+    "AutoFarmSpeed_V7", 
+    100, 500, 500,
     function(value) flightSpeed = value end
 )
 
 Tab:AddSlider(
     { EN = "Flight Altitude", RU = "Высота полета (Y)" },
-    "FlightAlt_V6", 
-    50, 120, 100, -- Дефолт 100
+    "FlightAlt_V7", 
+    50, 120, 100,
     function(value) FLIGHT_ALTITUDE = value end
 )
 
 Tab:AddSlider(
     { EN = "Fall Speed", RU = "Скорость падения" },
-    "FallSpeed_V6", 
-    20, 150, 150, -- Дефолт 150
+    "FallSpeed_V7", 
+    20, 150, 150,
     function(value) dropSpeed = value end
 )
 
 Tab:AddSlider(
-    { EN = "Chest Y Offset", RU = "Коррекция высоты сундука" },
-    "ChestYOffset_V6", 
-    -20, 20, 0, -- Дефолт 0
+    { EN = "Chest Y Offset", RU = "Коррекция высоты" },
+    "ChestYOffset_V7", 
+    -20, 20, 0,
     function(value) chestYOffset = value end
+)
+
+-- НОВЫЙ СЛАЙДЕР: Время ожидания на сундуке
+Tab:AddSlider(
+    { EN = "Claim Wait Time", RU = "Время ожидания на сундуке" },
+    "ClaimWait_V7", 
+    2, 15, 5,
+    function(value) waitTime = value end
 )
 
 Tab:AddToggle(
     { EN = "Enable Auto Farm", RU = "Включить автофарм" },
-    "AutoFarmToggle_V6", 
+    "AutoFarmToggle_V7", 
     false,
     function(state)
         autoFarmActive = state
@@ -299,4 +323,4 @@ Tab:AddButton({ EN = "Reset Character", RU = "Ресет персонажа" }, 
     end
 end)
 
-print("[BloxyScripts Hub] Модуль АвтоФарм V6 успешно загружен!")
+print("[BloxyScripts Hub] Модуль АвтоФарм V7 успешно загружен!")
