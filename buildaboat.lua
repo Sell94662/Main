@@ -1,5 +1,5 @@
 -- ==========================================================
--- BloxyScripts Hub | Модуль АвтоФарм (V8 - Smooth Flight, No Reset)
+-- BloxyScripts Hub | Модуль АвтоФарм (V9 - Hyperspeed)
 -- ==========================================================
 
 print("[BloxyScripts Hub] Загрузка модуля АвтоФарм...")
@@ -37,16 +37,16 @@ local CHEST_Z = 9502.53
 local CHEST_Y = -353.53 
 
 local FLIGHT_ALTITUDE   = 100  
-local CHEST_ZONE_RADIUS = 20   
+local CHEST_ZONE_RADIUS = 50   -- Увеличил радиус, чтобы не проскочить на высокой скорости
 
 -- ==========================================================
 -- СОСТОЯНИЕ
 -- ==========================================================
 local autoFarmActive   = false
-local flightSpeed      = 500  
-local dropSpeed        = 60   -- Плавная скорость подлета к сундуку
+local flightSpeed      = 1000 -- Новая скорость по умолчанию
+local dropSpeed        = 150  
 local chestYOffset     = 0     
-local waitTime         = 4    -- Ждем 4 секунды на сундуке
+local waitTime         = 4    
 local farmThread       = nil
 local noclipConnection = nil
 
@@ -119,7 +119,7 @@ local function startFarmLoop()
             local flightY = FLIGHT_ALTITUDE + chestYOffset
             local targetChestPos = Vector3.new(CHEST_X, currentChestY, CHEST_Z)
 
-            -- 1) Возврат на старт для нового круга (телепорт только на старт)
+            -- 1) Возврат на старт
             root.CFrame = CFrame.new(START_POSITION)
             freezeRoot(root)
             task.wait(0.5)
@@ -131,42 +131,64 @@ local function startFarmLoop()
             while autoFarmActive do
                 local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
                 if not r then break end
-                if (upTarget - r.Position).Magnitude <= 5 then break end
+                
+                local dist = (upTarget - r.Position).Magnitude
+                if dist <= 5 then break end
                 
                 local dt = RunService.Heartbeat:Wait()
+                local step = flightSpeed * dt
                 local dir = (upTarget - r.Position).Unit
-                r.CFrame = r.CFrame + (dir * (flightSpeed * dt))
+                
+                -- Защита от перелета при лагах
+                if dist <= step then
+                    r.CFrame = CFrame.new(upTarget)
+                else
+                    r.CFrame = r.CFrame + (dir * step)
+                end
             end
 
             if not autoFarmActive then break end
 
-            -- 3) ГОРИЗОНТАЛЬНЫЙ ПОЛЕТ К ЗОНЕ НАД СУНДУКОМ
+            -- 3) ГОРИЗОНТАЛЬНЫЙ ПОЛЕТ (Гипер-скорость)
             local overTarget = Vector3.new(CHEST_X, flightY, CHEST_Z)
             while autoFarmActive do
                 local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
                 if not r then break end
-                if (overTarget - r.Position).Magnitude <= CHEST_ZONE_RADIUS then break end
+                
+                local dist = (overTarget - r.Position).Magnitude
+                if dist <= CHEST_ZONE_RADIUS then break end
 
                 local dt = RunService.Heartbeat:Wait()
-                local dir = (overTarget - r.Position).Unit
-                r.CFrame = r.CFrame + (dir * (flightSpeed * dt))
-                r.CFrame = CFrame.new(r.Position.X, flightY, r.Position.Z) -- Держим высоту
+                local step = flightSpeed * dt
+                local dir = Vector3.new(overTarget.X - r.Position.X, 0, overTarget.Z - r.Position.Z).Unit
+                
+                if dist <= step then
+                    r.CFrame = CFrame.new(overTarget.X, flightY, overTarget.Z)
+                else
+                    r.CFrame = r.CFrame + (dir * step)
+                    r.CFrame = CFrame.new(r.Position.X, flightY, r.Position.Z)
+                end
             end
 
             if not autoFarmActive then break end
 
-            -- 4) ПЛАВНЫЙ ПОДЛЕТ К СУНДУКУ (По диагонали)
+            -- 4) ПЛАВНЫЙ ПОДЛЕТ К СУНДУКУ
             while autoFarmActive do
                 local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
                 if not r then break end
                 
-                -- Если подлетели близко к сундуку — стоп
-                if (targetChestPos - r.Position).Magnitude <= 5 then break end
+                local dist = (targetChestPos - r.Position).Magnitude
+                if dist <= 5 then break end
 
                 local dt = RunService.Heartbeat:Wait()
-                -- Летим прямо к сундуку
+                local step = dropSpeed * dt
                 local dir = (targetChestPos - r.Position).Unit
-                r.CFrame = r.CFrame + (dir * (dropSpeed * dt))
+                
+                if dist <= step then
+                    r.CFrame = CFrame.new(targetChestPos)
+                else
+                    r.CFrame = r.CFrame + (dir * step)
+                end
                 freezeRoot(r)
             end
 
@@ -176,8 +198,6 @@ local function startFarmLoop()
             char, root, hum = getCharacter(5)
             if root and hum then
                 local timer = 0
-                
-                -- Прилипаем к сундуку, чтобы игра 100% засчитала
                 local touchCFrame = CFrame.new(targetChestPos)
                 
                 while timer < waitTime and autoFarmActive do
@@ -185,7 +205,6 @@ local function startFarmLoop()
                     root.CFrame = touchCFrame
                     freezeRoot(root)
 
-                    -- Авто-клик по кнопке "Claim" (если она появилась)
                     pcall(function()
                         local function clickClaim(parent)
                             for _, gui in pairs(parent:GetDescendants()) do
@@ -202,7 +221,6 @@ local function startFarmLoop()
                     timer = timer + dt
                 end
             end
-            -- Тут ресета нет. Скрипт просто пойдет на новую итерацию цикла (вернется на старт).
         else
             task.wait(0.5)
         end
@@ -212,50 +230,51 @@ local function startFarmLoop()
 end
 
 -- ==========================================================
--- UI (Ключи V8 для сброса настроек)
+-- UI (Ключи V9)
 -- ==========================================================
 local Tab = Window:CreateTab({ EN = "Auto Farm", RU = "Автофарм" }, 10)
 
 Tab:AddSection({ EN = "Flight Settings", RU = "Настройки полета" })
 
+-- УВЕЛИЧИЛ МАКСИМУМ ДО 1500
 Tab:AddSlider(
     { EN = "Flight Speed", RU = "Скорость полёта" },
-    "AutoFarmSpeed_V8", 
-    100, 500, 500,
+    "AutoFarmSpeed_V9", 
+    100, 1500, 1000, -- 1000 по умолчанию, макс 1500
     function(value) flightSpeed = value end
 )
 
 Tab:AddSlider(
     { EN = "Flight Altitude", RU = "Высота полета (Y)" },
-    "FlightAlt_V8", 
+    "FlightAlt_V9", 
     50, 120, 100,
     function(value) FLIGHT_ALTITUDE = value end
 )
 
 Tab:AddSlider(
     { EN = "Fly Down Speed", RU = "Скорость подлета к сундуку" },
-    "FallSpeed_V8", 
-    20, 150, 60, -- Поставил 60 для плавного долета
+    "FallSpeed_V9", 
+    20, 150, 150,
     function(value) dropSpeed = value end
 )
 
 Tab:AddSlider(
     { EN = "Chest Y Offset", RU = "Коррекция высоты" },
-    "ChestYOffset_V8", 
+    "ChestYOffset_V9", 
     -20, 20, 0,
     function(value) chestYOffset = value end
 )
 
 Tab:AddSlider(
     { EN = "Wait Time", RU = "Время ожидания на сундуке" },
-    "WaitTime_V8", 
+    "WaitTime_V9", 
     2, 10, 4,
     function(value) waitTime = value end
 )
 
 Tab:AddToggle(
     { EN = "Enable Auto Farm", RU = "Включить автофарм" },
-    "AutoFarmToggle_V8", 
+    "AutoFarmToggle_V9", 
     false,
     function(state)
         autoFarmActive = state
@@ -310,4 +329,4 @@ Tab:AddButton({ EN = "Reset Character", RU = "Ресет персонажа" }, 
     end
 end)
 
-print("[BloxyScripts Hub] Модуль АвтоФарм V8 успешно загружен!")
+print("[BloxyScripts Hub] Модуль АвтоФарм V9 успешно загружен!")
