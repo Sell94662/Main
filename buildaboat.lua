@@ -202,7 +202,7 @@ Tab:AddSection({ EN = "Flight Settings", RU = "Настройки полета" 
 Tab:AddSlider(
     { EN = "Flight Speed", RU = "Скорость полёта" },
     "AutoFarmSpeedKey",
-    100, 500, 300,
+    100, 120, 300,
     function(value) flightSpeed = value end
 )
 
