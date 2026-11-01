@@ -1,5 +1,5 @@
 -- ==========================================================
--- BloxyScripts Hub | Модуль АвтоФарм (Fixed Version)
+-- BloxyScripts Hub | Модуль АвтоФарм (Координаты обновлены)
 -- ==========================================================
 
 print("[BloxyScripts Hub] Загрузка модуля АвтоФарм...")
@@ -24,10 +24,7 @@ local Window = Library:CreateWindow({
     FolderName = "BloxyConfigs"
 })
 
-if not Window then
-    warn("[BloxyScripts Hub] ОШИБКА: Окно не создано!")
-    return
-end
+if not Window then return end
 
 -- Сервисы
 local Players    = game:GetService("Players")
@@ -38,22 +35,23 @@ local LocalPlayer = Players.LocalPlayer
 -- КОНСТАНТЫ И НАСТРОЙКИ
 -- ==========================================================
 local START_POSITION    = Vector3.new(41.48, -12.09, -35.71)
--- Координаты сундука (X и Z). Y мы вынесем в слайдер, так как он чаще всего требует подстройки.
-local CHEST_X = 0
-local CHEST_Z = 9550
-local CHEST_Y_BASE = 50 -- Базовое значение Y
 
-local FLY_HEIGHT_OFFSET = 15   -- Насколько высоко взлетаем над стартом
-local CHEST_ZONE_RADIUS = 15   -- Радиус зоны над сундуком, где начинаем спуск
-local TOUCH_DISTANCE    = 3    -- Насколько близко к сундуку считаем "касанием"
-local DROP_SPEED        = 60   -- Скорость спуска вниз (studs/sec)
+-- НОВЫЕ КООРДИНАТЫ СУНДУКА (от пользователя)
+local CHEST_X = -46.42
+local CHEST_Z = 9502.53
+local CHEST_Y = -353.53 
+
+local FLY_HEIGHT_OFFSET = 50   -- Высота полета относительно старта
+local CHEST_ZONE_RADIUS = 15   -- Радиус зоны над сундуком (начинаем спуск)
+local TOUCH_DISTANCE    = 3    -- Насколько близко к Y сундука считаем касанием
+local DROP_SPEED        = 150  -- Скорость падения вниз (studs/sec)
 
 -- ==========================================================
 -- СОСТОЯНИЕ
 -- ==========================================================
 local autoFarmActive   = false
-local flightSpeed      = 150
-local chestYOffset     = 0     -- Смещение для настройки
+local flightSpeed      = 200  -- Увеличил скорость полета для дальних дистанций
+local chestYOffset     = 0     
 local farmThread       = nil
 local noclipConnection = nil
 
@@ -122,7 +120,8 @@ local function startFarmLoop()
         local char, root, hum = getCharacter(15)
 
         if char then
-            local currentChestY = CHEST_Y_BASE + chestYOffset
+            local currentChestY = CHEST_Y + chestYOffset
+            local flyHeight = START_POSITION.Y + FLY_HEIGHT_OFFSET
 
             -- 1) Телепорт на старт
             root.CFrame = CFrame.new(START_POSITION)
@@ -132,11 +131,10 @@ local function startFarmLoop()
             if not autoFarmActive then break end
 
             -- 2) Подъём над стартом
-            local flyHeight = START_POSITION.Y + FLY_HEIGHT_OFFSET
-            root.CFrame = CFrame.new(Vector3.new(START_POSITION.X, flyHeight, START_POSITION.Z))
+            root.CFrame = CFrame.new(START_POSITION.X, flyHeight, START_POSITION.Z)
             freezeRoot(root)
 
-            -- 3) ПОЛЁТ СТРОГО ПО ГОРИЗОНТАЛИ
+            -- 3) ГОРИЗОНТАЛЬНЫЙ ПОЛЁТ ДО ЗОНЫ
             while autoFarmActive do
                 local c = LocalPlayer.Character
                 if not c then break end
@@ -144,7 +142,7 @@ local function startFarmLoop()
                 local h = c:FindFirstChildOfClass("Humanoid")
                 if not r or not h or h.Health <= 0 then break end
 
-                -- Проверяем расстояние по горизонтали (X, Z) до сундука
+                -- Проверяем расстояние по X и Z до сундука
                 local dxz = Vector3.new(r.Position.X - CHEST_X, 0, r.Position.Z - CHEST_Z)
                 
                 if dxz.Magnitude <= CHEST_ZONE_RADIUS then
@@ -152,14 +150,12 @@ local function startFarmLoop()
                 end
 
                 local dt = RunService.Heartbeat:Wait()
-                
-                -- Вектор движения только по XZ
                 local deltaXZ = Vector3.new(CHEST_X - r.Position.X, 0, CHEST_Z - r.Position.Z)
                 
                 if deltaXZ.Magnitude > 0.01 then
                     local step = deltaXZ.Unit * (flightSpeed * dt)
                     local newPos = r.Position + step
-                    -- ЖЁСТКО удерживаем Y на уровне flyHeight (решает проблему проседания)
+                    -- ЖЁСТКО удерживаем высоту flyHeight
                     r.CFrame = CFrame.new(newPos.X, flyHeight, newPos.Z)
                 end
                 freezeRoot(r)
@@ -167,7 +163,7 @@ local function startFarmLoop()
 
             if not autoFarmActive then break end
 
-            -- 4) ПЛАВНЫЙ СПУСК ВНИЗ
+            -- 4) ПЛАВНЫЙ СПУСК ВНИЗ (на нужную высоту сундука)
             char, root, hum = getCharacter(5)
             if root and hum then
                 -- Выравниваемся ровно над сундуком
@@ -175,7 +171,7 @@ local function startFarmLoop()
                 freezeRoot(root)
                 task.wait(0.1)
 
-                -- Спуск строго по оси Y
+                -- Спускаемся строго вниз до Y сундука
                 while autoFarmActive do
                     local c = LocalPlayer.Character
                     if not c then break end
@@ -185,7 +181,7 @@ local function startFarmLoop()
                     local targetY = currentChestY + TOUCH_DISTANCE
                     
                     if r.Position.Y <= targetY then
-                        break -- Приземлились на сундук
+                        break -- Приземлились на нужную высоту
                     end
 
                     local dt = RunService.Heartbeat:Wait()
@@ -203,7 +199,7 @@ local function startFarmLoop()
                     root.CFrame = CFrame.new(CHEST_X, currentChestY + TOUCH_DISTANCE, CHEST_Z)
                     freezeRoot(root)
                     
-                    -- Ждем засчитывания награды
+                    -- Ждем засчитывания награды (если сундук не засчитывается, увеличь до 3-4 сек)
                     task.wait(2.5)
 
                     -- Ресет
@@ -231,15 +227,15 @@ Tab:AddSection({ EN = "Gold Farm Settings", RU = "Настройки фарма"
 Tab:AddSlider(
     { EN = "Flight Speed", RU = "Скорость полёта" },
     "AutoFarmSpeedKey",
-    50, 400, 150,
+    50, 400, 200,
     function(value) flightSpeed = value end
 )
 
--- ДОБАВЛЕНО: Слайдер для настройки Y сундука
+-- Оставил слайдер на случай, если нужно будет чуть-чуть подправить высоту
 Tab:AddSlider(
-    { EN = "Chest Y Offset", RU = "Высота сундука (Y)" },
+    { EN = "Chest Y Offset", RU = "Коррекция высоты (Y)" },
     "ChestYOffsetKey",
-    -20, 30, 0,
+    -20, 20, 0,
     function(value) 
         chestYOffset = value 
     end
@@ -286,11 +282,10 @@ Tab:AddButton({ EN = "Teleport to Start", RU = "Телепорт на старт
     end
 end)
 
--- ИСПРАВЛЕНО: Телепорт к сундуку с учётом смещения
 Tab:AddButton({ EN = "Teleport to Chest", RU = "Телепорт к сундуку" }, function()
     local char = LocalPlayer.Character
     if char and char:FindFirstChild("HumanoidRootPart") then
-        local targetY = CHEST_Y_BASE + chestYOffset + 3 -- +3 чтобы не застрять в полу/сундуке
+        local targetY = CHEST_Y + chestYOffset + 3
         char.HumanoidRootPart.CFrame = CFrame.new(CHEST_X, targetY, CHEST_Z)
     end
 end)
