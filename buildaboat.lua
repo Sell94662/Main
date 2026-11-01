@@ -1,10 +1,10 @@
--- Безопасное подключение фреймворка
+-- Безопасная загрузка фреймворка с проверкой HTTP 404
 local Success, Library = pcall(function()
     return loadstring(game:HttpGet("https://raw.githubusercontent.com/TheBloxyScripts/BloxyScripts/main/main.lua"))()
 end)
 
 if not Success or not Library then
-    warn("[BloxyScripts Error]: Не удалось загрузить UI-библиотеку!")
+    warn("[BloxyScripts Error]: Ошибка 404! Проверь правильность ссылки на main.lua в твоем GitHub репозитории.")
     return
 end
 
@@ -37,7 +37,7 @@ local flightSpeed = 150
 local farmThread = nil
 local noclipConnection = nil
 
--- Функция NoClip (прохождение сквозь стены)
+-- Функция NoClip (прохождение сквозь стены и острова)
 local function enableNoClip()
     if noclipConnection then return end
     noclipConnection = RunService.Stepped:Connect(function()
@@ -58,7 +58,7 @@ local function disableNoClip()
     end
 end
 
--- Функция выполнения одного цикла полета (строго на базе твоего кода)
+-- Функция выполнения цикла автофарма
 local function startFarmLoop()
     enableNoClip()
 
@@ -87,7 +87,6 @@ local function startFarmLoop()
                 local dt = RunService.Heartbeat:Wait()
                 local direction = (targetFlightPos - rootPart.Position).Unit
                 
-                -- Безопасная установка CFrame и сброс физической скорости
                 rootPart.CFrame = rootPart.CFrame + (direction * (flightSpeed * dt))
                 rootPart.AssemblyLinearVelocity = Vector3.zero
                 rootPart.AssemblyAngularVelocity = Vector3.zero
@@ -114,12 +113,12 @@ local function startFarmLoop()
     disableNoClip()
 end
 
--- Создание вкладки управления (твой оригинальный синтаксис)
+-- Создание вкладки управления
 local FarmTab = Window:CreateTab({EN = "Auto Farm", RU = "Автофарм"})
 
 FarmTab:AddSection({EN = "Gold Farm Settings", RU = "Настройки фарма золота"})
 
-FarmTab:AddSlider({EN = "Flight Speed", RU = "Скорость полета"}, "AutoFarmSpeedKey", 50, 300, 150, function(value)
+FarmTab:AddSlider({EN = "Flight Speed", RU = "Скорость погоня"}, "AutoFarmSpeedKey", 50, 300, 150, function(value)
     flightSpeed = value
 end)
 
