@@ -1,10 +1,9 @@
 -- ==========================================================
--- BloxyScripts Hub | Модуль АвтоФарм (Smooth Version)
+-- BloxyScripts Hub | Модуль АвтоФарм (Final Fix)
 -- ==========================================================
 
 print("[BloxyScripts Hub] Загрузка модуля АвтоФарм...")
 
--- Защищённая загрузка фреймворка
 local ok, Library = pcall(function()
     return loadstring(game:HttpGet(
         "https://raw.githubusercontent.com/TheBloxyScripts/BloxyScripts/main/main.lua"
@@ -16,7 +15,6 @@ if not ok or not Library then
     return
 end
 
--- Создание окна
 local Window = Library:CreateWindow({
     Name = "BloxyScripts | Hub",
     LoadingTitle = "Загрузка модулей...",
@@ -26,7 +24,6 @@ local Window = Library:CreateWindow({
 
 if not Window then return end
 
--- Сервисы
 local Players    = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
@@ -35,21 +32,20 @@ local LocalPlayer = Players.LocalPlayer
 -- КОНСТАНТЫ
 -- ==========================================================
 local START_POSITION = Vector3.new(41.48, -12.09, -35.71)
-
 local CHEST_X = -46.42
 local CHEST_Z = 9502.53
 local CHEST_Y = -353.53 
 
-local FLIGHT_ALTITUDE   = 120  -- Высота полета (макс 120)
-local CHEST_ZONE_RADIUS = 20   -- Радиус зоны, где начинаем снижаться
-local TOUCH_DISTANCE    = 3    -- Отступ от сундука
+local FLIGHT_ALTITUDE   = 120  -- Жестко заданная высота (макс 120)
+local CHEST_ZONE_RADIUS = 20   
+local TOUCH_DISTANCE    = 3    
 
 -- ==========================================================
 -- СОСТОЯНИЕ
 -- ==========================================================
 local autoFarmActive   = false
-local flightSpeed      = 300  -- Скорость горизонтального полета
-local dropSpeed        = 50   -- Скорость падения (сделал плавнее)
+local flightSpeed      = 300  
+local dropSpeed        = 50   -- Плавная скорость падения
 local chestYOffset     = 0     
 local farmThread       = nil
 local noclipConnection = nil
@@ -103,8 +99,14 @@ local function getCharacter(timeout)
     return nil
 end
 
+local function freezeRoot(root)
+    if not root then return end
+    root.AssemblyLinearVelocity  = Vector3.zero
+    root.AssemblyAngularVelocity = Vector3.zero
+end
+
 -- ==========================================================
--- ОСНОВНОЙ ЦИКЛ АВТОФАРМА (ПЛАВНАЯ АРКА)
+-- ОСНОВНОЙ ЦИКЛ АВТОФАРМА
 -- ==========================================================
 local function startFarmLoop()
     enableNoClip()
@@ -116,24 +118,28 @@ local function startFarmLoop()
             local currentChestY = CHEST_Y + chestYOffset
             local flightY = FLIGHT_ALTITUDE + chestYOffset
 
-            -- 1) Телепорт на старт
+            -- 1) Телепорт на старт и обнуление скорости
             root.CFrame = CFrame.new(START_POSITION)
-            task.wait(0.2)
+            freezeRoot(root)
+            task.wait(0.3)
 
             if not autoFarmActive then break end
 
-            -- 2) ПЛАВНЫЙ ВЗЛЕТ (Арка: часть 1)
+            -- 2) ВЗЛЕТ (Арка: часть 1)
             local upTarget = Vector3.new(START_POSITION.X, flightY, START_POSITION.Z)
             while autoFarmActive do
                 local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
                 if not r then break end
                 
                 local dist = (upTarget - r.Position).Magnitude
-                if dist <= 5 then break end
+                if dist <= 5 then 
+                    freezeRoot(r) 
+                    break 
+                end
 
                 local dt = RunService.Heartbeat:Wait()
                 local dir = (upTarget - r.Position).Unit
-                r.CFrame = r.CFrame + (dir * (flightSpeed * dt)) -- Взлет с той же скоростью
+                r.CFrame = r.CFrame + (dir * (flightSpeed * dt))
             end
 
             if not autoFarmActive then break end
@@ -146,29 +152,46 @@ local function startFarmLoop()
                 if not r then break end
                 
                 local dist = (overTarget - r.Position).Magnitude
-                if dist <= CHEST_ZONE_RADIUS then break end
+                if dist <= CHEST_ZONE_RADIUS then 
+                    freezeRoot(r) 
+                    break 
+                end
 
                 local dt = RunService.Heartbeat:Wait()
                 local dir = Vector3.new(overTarget.X - r.Position.X, 0, overTarget.Z - r.Position.Z).Unit
                 r.CFrame = r.CFrame + (dir * (flightSpeed * dt))
+                -- Жестко держим высоту
                 r.CFrame = CFrame.new(r.Position.X, flightY, r.Position.Z)
             end
 
             if not autoFarmActive then break end
-            task.wait(0.1)
+            task.wait(0.2) -- Пауза для стабилизации физики
 
             -- 4) ПЛАВНЫЙ СПУСК (Арка: часть 3)
-            local targetY = currentChestY + TOUCH_DISTANCE
-            while autoFarmActive do
-                local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                if not r then break end
-                
-                -- Спускаемся строго по вертикали, чтобы не было рывков в стороны
-                if r.Position.Y <= targetY then break end
+            char, root, hum = getCharacter(5)
+            if root then
+                -- Выравниваем ровно над сундуком и ОБНУЛЯЕМ скорость
+                root.CFrame = CFrame.new(CHEST_X, flightY, CHEST_Z)
+                freezeRoot(root)
+                task.wait(0.2)
 
-                local dt = RunService.Heartbeat:Wait()
-                local newY = math.max(r.Position.Y - (dropSpeed * dt), targetY)
-                r.CFrame = CFrame.new(CHEST_X, newY, CHEST_Z)
+                local targetY = currentChestY + TOUCH_DISTANCE
+                
+                while autoFarmActive do
+                    local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                    if not r then break end
+                    
+                    if r.Position.Y <= targetY then 
+                        freezeRoot(r)
+                        break 
+                    end
+
+                    local dt = RunService.Heartbeat:Wait()
+                    -- Плавное вычитание высоты
+                    local newY = math.max(r.Position.Y - (dropSpeed * dt), targetY)
+                    r.CFrame = CFrame.new(CHEST_X, newY, CHEST_Z)
+                    freezeRoot(r) -- Держим нулевую скорость, чтобы не было инерции
+                end
             end
 
             if not autoFarmActive then break end
@@ -176,8 +199,8 @@ local function startFarmLoop()
             -- 5) КАСАНИЕ И РЕСЕТ
             char, root, hum = getCharacter(5)
             if root and hum then
-                root.CFrame = CFrame.new(CHEST_X, targetY, CHEST_Z)
-                task.wait(2.5) -- Ждем награду
+                root.CFrame = CFrame.new(CHEST_X, currentChestY + TOUCH_DISTANCE, CHEST_Z)
+                task.wait(2.5)
 
                 if hum and hum.Health > 0 then
                     hum.Health = 0
@@ -193,7 +216,7 @@ local function startFarmLoop()
 end
 
 -- ==========================================================
--- UI
+-- UI (Сменил ключи конфига на V4, чтобы сбросить старые настройки)
 -- ==========================================================
 local Tab = Window:CreateTab({ EN = "Auto Farm", RU = "Автофарм" }, 10)
 
@@ -201,35 +224,35 @@ Tab:AddSection({ EN = "Flight Settings", RU = "Настройки полета" 
 
 Tab:AddSlider(
     { EN = "Flight Speed", RU = "Скорость полёта" },
-    "AutoFarmSpeedKey",
-    100, 120, 300,
+    "AutoFarmSpeedV4", 
+    100, 500, 300,
     function(value) flightSpeed = value end
 )
 
 Tab:AddSlider(
     { EN = "Flight Altitude", RU = "Высота полета (Y)" },
-    "FlightAltitudeKey",
-    50, 120, 120,  -- Ограничил максимум 120
+    "FlightAltV4", 
+    50, 120, 120, 
     function(value) FLIGHT_ALTITUDE = value end
 )
 
 Tab:AddSlider(
     { EN = "Fall Speed", RU = "Скорость падения" },
-    "FallSpeedKey",
-    20, 150, 50,   -- Новая настройка для плавного спуска
+    "FallSpeedV4", 
+    20, 150, 50, 
     function(value) dropSpeed = value end
 )
 
 Tab:AddSlider(
     { EN = "Chest Y Offset", RU = "Коррекция высоты сундука" },
-    "ChestYOffsetKey",
+    "ChestYOffsetV4", 
     -20, 20, 0,
     function(value) chestYOffset = value end
 )
 
 Tab:AddToggle(
     { EN = "Enable Auto Farm", RU = "Включить автофарм" },
-    "AutoFarmToggleKey",
+    "AutoFarmToggleV4", 
     false,
     function(state)
         autoFarmActive = state
