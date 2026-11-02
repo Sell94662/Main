@@ -20,9 +20,7 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
 
--- ==========================================================
--- БАЗОВЫЙ ОБХОД АНТИ-ЧИТА (Anti-Kick)
--- ==========================================================
+-- Базовый обход анти-чита (Anti-Kick)
 pcall(function()
     local mt = getrawmetatable(game)
     local oldNamecall = mt.__namecall
@@ -33,43 +31,26 @@ pcall(function()
         return oldNamecall(self, ...)
     end)
     setreadonly(mt, true)
-    
-    for _, v in pairs(LocalPlayer.PlayerScripts:GetChildren()) do
-        if v.Name == "LocalScript" or v.Name == "LocalScript2" then
-            v:Destroy()
-        end
-    end
 end)
 
--- ==========================================================
--- ПЕРЕМЕННЫЕ
--- ==========================================================
+-- Переменные
+local WIN_POSITION = Vector3.new(43.00, 359.84, 99.63)
 local noclipActive, infJumpActive, flyActive, tapTpEnabled = false, false, false, false
 local flySpeed = 50
 local noclipConnection, flyConnection = nil, nil
 local flyBV, flyBG = nil, nil
 local tapConn = nil
 
--- ==========================================================
--- ФУНКЦИИ
--- ==========================================================
-
--- 1. Безопасный телепорт
+-- Функции
 local function SafeTeleport(targetCFrame)
     local char = LocalPlayer.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-    
     local root = char.HumanoidRootPart
     root.AssemblyLinearVelocity = Vector3.zero
     root.AssemblyAngularVelocity = Vector3.zero
-    
-    local tweenInfo = TweenInfo.new(0.2, Enum.EasingStyle.Linear)
-    local tween = TweenService:Create(root, tweenInfo, {CFrame = targetCFrame})
-    tween:Play()
-    tween.Completed:Wait()
+    TweenService:Create(root, TweenInfo.new(0.1, Enum.EasingStyle.Linear), {CFrame = targetCFrame}):Play()
 end
 
--- 2. NoClip
 local function ToggleNoClip(state)
     noclipActive = state
     if state then
@@ -77,9 +58,7 @@ local function ToggleNoClip(state)
             noclipConnection = RunService.Stepped:Connect(function()
                 if noclipActive and LocalPlayer.Character then
                     for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
-                        if part:IsA("BasePart") and part.CanCollide then
-                            part.CanCollide = false
-                        end
+                        if part:IsA("BasePart") and part.CanCollide then part.CanCollide = false end
                     end
                 end
             end)
@@ -89,48 +68,34 @@ local function ToggleNoClip(state)
     end
 end
 
--- 3. Fly Mode (LinearVelocity + AlignOrientation)
 local function ToggleFly(state)
     flyActive = state
     local char = LocalPlayer.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-    
     local root = char.HumanoidRootPart
     
     if flyActive then
-        local att = Instance.new("Attachment")
-        att.Name = "FlyAttachment"
-        att.Parent = root
+        local att = Instance.new("Attachment", root)
+        flyBV = Instance.new("LinearVelocity", root)
+        flyBV.Attachment0 = att
+        flyBV.MaxForce = math.huge
+        flyBV.RelativeTo = Enum.ActuatorRelativeTo.World
         
-        local lv = Instance.new("LinearVelocity")
-        lv.Name = "FlyLinearVelocity"
-        lv.Attachment0 = att
-        lv.MaxForce = math.huge
-        lv.VectorVelocity = Vector3.zero
-        lv.RelativeTo = Enum.ActuatorRelativeTo.World
-        lv.Parent = root
-        flyBV = lv
-        
-        local la = Instance.new("AlignOrientation")
-        la.Name = "FlyAlignOrientation"
-        la.Attachment0 = att
-        la.MaxTorque = math.huge
-        la.Responsiveness = 200
-        la.Parent = root
-        flyBG = la
+        flyBG = Instance.new("AlignOrientation", root)
+        flyBG.Attachment0 = att
+        flyBG.MaxTorque = math.huge
+        flyBG.Responsiveness = 200
         
         flyConnection = RunService.RenderStepped:Connect(function()
             if not flyActive or not flyBV or not flyBG then return end
             local cam = workspace.CurrentCamera
             local moveDir = Vector3.zero
-            
             if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + cam.CFrame.LookVector end
             if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - cam.CFrame.LookVector end
             if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - cam.CFrame.RightVector end
             if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + cam.CFrame.RightVector end
             if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDir = moveDir + Vector3.new(0, 1, 0) end
             if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveDir = moveDir - Vector3.new(0, 1, 0) end
-            
             flyBV.VectorVelocity = moveDir * flySpeed
             flyBG.CFrame = cam.CFrame
         end)
@@ -143,7 +108,6 @@ local function ToggleFly(state)
     end
 end
 
--- 4. Tap/Click Teleport
 local function ToggleTapTp(state)
     tapTpEnabled = state
     if state and not tapConn then
@@ -151,7 +115,7 @@ local function ToggleTapTp(state)
             if gameProcessed or not tapTpEnabled then return end
             if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                 local mouse = LocalPlayer:GetMouse()
-                if mouse and mouse.Hit and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                if mouse and mouse.Hit then
                     SafeTeleport(CFrame.new(mouse.Hit.Position + Vector3.new(0, 3, 0)))
                 end
             end
@@ -161,83 +125,48 @@ local function ToggleTapTp(state)
     end
 end
 
--- 5. Infinite Jump
 UserInputService.JumpRequest:Connect(function()
     if infJumpActive and LocalPlayer.Character then
         local humanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if humanoid then
-            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-        end
+        if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end
     end
 end)
 
--- ==========================================================
--- ВКЛАДКИ (Ключи V5 для сброса конфига)
--- ==========================================================
+-- UI (Ключи V6)
 local MainTab = Window:CreateTab({EN = "Main", RU = "Главная"})
 local PlayerTab = Window:CreateTab({EN = "Player", RU = "Игрок"})
 
--- ==================== MAIN TAB ====================
+-- MAIN
 MainTab:AddSection({EN = "Tower Automation", RU = "Автоматизация башни"})
 
 MainTab:AddButton({EN = "Instant Win (To Finish)", RU = "Мгновенная победа (Телепорт)"}, function()
-    -- Ищем портал финиша (разные варианты названий)
-    local success, finishPart = pcall(function()
-        local tower = workspace:FindFirstChild("Tower") or workspace:FindFirstChild("tower")
-        local sections = tower:FindFirstChild("Sections") or tower:FindFirstChild("sections")
-        local finish = sections:FindFirstChild("Finish") or sections:FindFirstChild("finish")
-        return finish:FindFirstChild("Start") or finish:FindFirstChild("start")
-    end)
-    
-    if success and finishPart then
-        -- Берем CFrame портала (позиция + направление взгляда)
-        -- Прибавляем 2 стада по Y, чтобы не застрять в полу
-        local targetCFrame = finishPart.CFrame + Vector3.new(0, 2, 0)
-        
-        SafeTeleport(targetCFrame)
-        
-        -- Даем толчок ВПЕРЕД по направлению портала, чтобы игра засчитала финиш
-        task.wait(0.1)
-        local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if root then
-            root.AssemblyLinearVelocity = root.CFrame.LookVector * 30
-        end
-        
-        print("[ToH]: Телепорт на финиш выполнен (залет прямо в дверь).")
-    else
-        -- Если объект не найден, летим по твоим координатам
-        SafeTeleport(CFrame.new(43.00, 359.84, 99.63))
-        print("[ToH]: Телепорт по координатам.")
-    end
+    SafeTeleport(CFrame.new(WIN_POSITION))
+    print("[ToH]: Простой телепорт выполнен.")
 end)
 
--- NoClip ВЫКЛЮЧЕН по умолчанию (false)
-MainTab:AddToggle({EN = "NoClip (Walk through walls)", RU = "NoClip (Сквозь стены)"}, "NoClipKey_V5", false, ToggleNoClip)
+MainTab:AddToggle({EN = "NoClip", RU = "NoClip (Сквозь стены)"}, "NoClipKey_V6", false, ToggleNoClip)
+MainTab:AddToggle({EN = "Tap / Click Teleport", RU = "Телепорт по клику"}, "TapTpKey_V6", false, ToggleTapTp)
 
-MainTab:AddToggle({EN = "Tap / Click Teleport", RU = "Телепорт по клику / тапу"}, "TapTpKey_V5", false, ToggleTapTp)
-
--- ==================== PLAYER TAB ====================
+-- PLAYER
 PlayerTab:AddSection({EN = "Movement & Physics", RU = "Физика и полет"})
 
-PlayerTab:AddToggle({EN = "Infinite Jump", RU = "Бесконечный прыжок"}, "InfJumpKey_V5", false, function(state)
+PlayerTab:AddToggle({EN = "Infinite Jump", RU = "Бесконечный прыжок"}, "InfJumpKey_V6", false, function(state)
     infJumpActive = state
 end)
 
-PlayerTab:AddToggle({EN = "Fly Mode", RU = "Режим полета"}, "FlyKey_V5", false, ToggleFly)
+PlayerTab:AddToggle({EN = "Fly Mode", RU = "Режим полета"}, "FlyKey_V6", false, ToggleFly)
+PlayerTab:AddSlider({EN = "Fly Speed", RU = "Скорость полета"}, "FlySpeedKey_V6", 20, 200, 50, function(v) flySpeed = v end)
 
-PlayerTab:AddSlider({EN = "Fly Speed", RU = "Скорость полета"}, "FlySpeedKey_V5", 20, 200, 50, function(v) flySpeed = v end)
-
-PlayerTab:AddSlider({EN = "WalkSpeed", RU = "Скорость бега"}, "SpeedKey_V5", 16, 150, 16, function(v)
+PlayerTab:AddSlider({EN = "WalkSpeed", RU = "Скорость бега"}, "SpeedKey_V6", 16, 150, 16, function(v)
     if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
-        LocalPlayer.Character:FindFirstChildOfClass("Humanoid").WalkSpeed = v
+        LocalPlayer.Character.Humanoid.WalkSpeed = v
     end
 end)
 
-PlayerTab:AddSlider({EN = "JumpPower", RU = "Высота прыжка"}, "JumpKey_V5", 50, 300, 50, function(v)
+PlayerTab:AddSlider({EN = "JumpPower", RU = "Высота прыжка"}, "JumpKey_V6", 50, 300, 50, function(v)
     if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
-        local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        hum.UseJumpPower = true
-        hum.JumpPower = v
+        LocalPlayer.Character.Humanoid.UseJumpPower = true
+        LocalPlayer.Character.Humanoid.JumpPower = v
     end
 end)
 
