@@ -26,7 +26,6 @@ local LocalPlayer = Players.LocalPlayer
 local WIN_POSITION = Vector3.new(43.00, 359.84, 99.63)
 
 -- Переменные состояний
-local godmodeActive = false
 local noclipActive = false
 local infJumpActive = false
 local flyActive = false
@@ -34,8 +33,8 @@ local flySpeed = 50
 local tapTpEnabled = false
 
 local noclipConnection = nil
-local godmodeConnection = nil
 local flyConnection = nil
+local att0, lv, la = nil, nil, nil
 
 -- Создание вкладок
 local MainTab = Window:CreateTab({EN = "Main", RU = "Главная"})
@@ -54,45 +53,7 @@ MainTab:AddButton({EN = "Instant Win (To Finish)", RU = "Мгновенная п
     end
 end)
 
--- 2. Godmode (Бессмертие через блокировку KillScript и обработку Touch)
-MainTab:AddToggle({EN = "Godmode (Anti-Death)", RU = "Режим бога (Бессмертие)"}, "GodmodeKey", false, function(state)
-    godmodeActive = state
-    
-    if godmodeActive then
-        -- Постоянный цикл отключения KillScript и бесконечного HP
-        godmodeConnection = RunService.Stepped:Connect(function()
-            if not godmodeActive then return end
-            local character = LocalPlayer.Character
-            if character then
-                local humanoid = character:FindFirstChildOfClass("Humanoid")
-                if humanoid then
-                    humanoid.MaxHealth = math.huge
-                    humanoid.Health = math.huge
-                end
-                
-                -- Безопасное нейтрализация скриптов урона в персонаже
-                for _, scriptObj in ipairs(character:GetDescendants()) do
-                    if scriptObj:IsA("LocalScript") and (scriptObj.Name:lower():find("kill") or scriptObj.Name:lower():find("touch")) then
-                        scriptObj.Disabled = true
-                    end
-                end
-            end
-        end)
-    else
-        if godmodeConnection then
-            godmodeConnection:Disconnect()
-            godmodeConnection = nil
-        end
-        local character = LocalPlayer.Character
-        if character and character:FindFirstChildOfClass("Humanoid") then
-            local hum = character:FindFirstChildOfClass("Humanoid")
-            hum.MaxHealth = 100
-            hum.Health = 100
-        end
-    end
-end)
-
--- 3. NoClip (Прохождение сквозь блоки)
+-- 2. NoClip (Прохождение сквозь блоки)
 MainTab:AddToggle({EN = "NoClip (Walk through walls)", RU = "NoClip (Сквозь стены)"}, "NoClipKey", false, function(state)
     noclipActive = state
     if state then
@@ -115,12 +76,11 @@ MainTab:AddToggle({EN = "NoClip (Walk through walls)", RU = "NoClip (Сквоз�
     end
 end)
 
--- 4. Tap / Click Teleport (Телепорт по клику мышью или тапу пальца на экране)
+-- 3. Tap / Click Teleport (Телепорт по клику мышью или тапу пальца на экране)
 MainTab:AddToggle({EN = "Tap / Click Teleport", RU = "Телепорт по клику / тапу"}, "TapTpKey", false, function(state)
     tapTpEnabled = state
 end)
 
--- Обработка нажатий экрана (Mobile) и мыши (PC)
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if not gameProcessed and tapTpEnabled then
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -136,7 +96,7 @@ end)
 -- ==================== PLAYER TAB ====================
 PlayerTab:AddSection({EN = "Movement & Physics", RU = "Физика и полет"})
 
--- 5. Infinite Jump (Бесконечный прыжок)
+-- 4. Infinite Jump (Бесконечный прыжок)
 PlayerTab:AddToggle({EN = "Infinite Jump", RU = "Бесконечный прыжок"}, "InfJumpKey", false, function(state)
     infJumpActive = state
 end)
@@ -150,8 +110,8 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
--- 6. Fly / Float (Полет через BodyVelocity + BodyGyro)
-PlayerTab:AddToggle({EN = "Fly Mode (BodyVelocity)", RU = "Режим полета (BodyVelocity)"}, "FlyKey", false, function(state)
+-- 5. Fly Mode (Полет через LinearVelocity)
+PlayerTab:AddToggle({EN = "Fly Mode (LinearVelocity)", RU = "Режим полета (LinearVelocity)"}, "FlyKey", false, function(state)
     flyActive = state
     local character = LocalPlayer.Character
     if not character or not character:FindFirstChild("HumanoidRootPart") then return end
@@ -159,23 +119,30 @@ PlayerTab:AddToggle({EN = "Fly Mode (BodyVelocity)", RU = "Режим полет
     local rootPart = character.HumanoidRootPart
     
     if flyActive then
-        -- Создаем BodyVelocity для движения
-        local bv = Instance.new("BodyVelocity")
-        bv.Name = "ToHFlyVelocity"
-        bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-        bv.Velocity = Vector3.zero
-        bv.Parent = rootPart
+        -- Создаем точку привязки (Attachment) для физики
+        att0 = Instance.new("Attachment")
+        att0.Name = "ToHFlyAttachment"
+        att0.Parent = rootPart
         
-        -- Создаем BodyGyro для стабилизации ориентации тела
-        local bg = Instance.new("BodyGyro")
-        bg.Name = "ToHFlyGyro"
-        bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-        bg.P = 9e4
-        bg.CFrame = rootPart.CFrame
-        bg.Parent = rootPart
+        -- LinearVelocity управляет вектором скорости и игнорирует гравитацию
+        lv = Instance.new("LinearVelocity")
+        lv.Name = "ToHLinearVelocity"
+        lv.Attachment0 = att0
+        lv.MaxForce = math.huge
+        lv.VectorVelocity = Vector3.zero
+        lv.RelativeTo = Enum.ActuatorRelativeTo.World
+        lv.Parent = rootPart
+        
+        -- AlignOrientation удерживает персонажа в ровном положении по камере
+        la = Instance.new("AlignOrientation")
+        la.Name = "ToHAlignOrientation"
+        la.Attachment0 = att0
+        la.MaxTorque = math.huge
+        la.Responsiveness = 200
+        la.Parent = rootPart
         
         flyConnection = RunService.RenderStepped:Connect(function()
-            if not flyActive or not rootPart:FindFirstChild("ToHFlyVelocity") then return end
+            if not flyActive or not lv or not la then return end
             
             local cam = workspace.CurrentCamera
             local moveDir = Vector3.zero
@@ -187,15 +154,14 @@ PlayerTab:AddToggle({EN = "Fly Mode (BodyVelocity)", RU = "Режим полет
             if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDir = moveDir + Vector3.new(0, 1, 0) end
             if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveDir = moveDir - Vector3.new(0, 1, 0) end
             
-            rootPart.ToHFlyVelocity.Velocity = moveDir * flySpeed
-            if rootPart:FindFirstChild("ToHFlyGyro") then
-                rootPart.ToHFlyGyro.CFrame = cam.CFrame
-            end
+            lv.VectorVelocity = moveDir * flySpeed
+            la.CFrame = cam.CFrame
         end)
     else
         if flyConnection then flyConnection:Disconnect() flyConnection = nil end
-        if rootPart:FindFirstChild("ToHFlyVelocity") then rootPart.ToHFlyVelocity:Destroy() end
-        if rootPart:FindFirstChild("ToHFlyGyro") then rootPart.ToHFlyGyro:Destroy() end
+        if lv then lv:Destroy() lv = nil end
+        if la then la:Destroy() la = nil end
+        if att0 then att0:Destroy() att0 = nil end
     end
 end)
 
@@ -204,7 +170,7 @@ PlayerTab:AddSlider({EN = "Fly Speed", RU = "Скорость полета"}, "F
     flySpeed = value
 end)
 
--- 7. WalkSpeed Slider
+-- 6. WalkSpeed Slider
 PlayerTab:AddSlider({EN = "WalkSpeed", RU = "Скорость бега"}, "SpeedKey", 16, 150, 16, function(value)
     local character = LocalPlayer.Character
     if character and character:FindFirstChildOfClass("Humanoid") then
@@ -212,7 +178,7 @@ PlayerTab:AddSlider({EN = "WalkSpeed", RU = "Скорость бега"}, "Speed
     end
 end)
 
--- 8. JumpPower Slider
+-- 7. JumpPower Slider
 PlayerTab:AddSlider({EN = "JumpPower", RU = "Высота прыжка"}, "JumpKey", 50, 300, 50, function(value)
     local character = LocalPlayer.Character
     if character and character:FindFirstChildOfClass("Humanoid") then
