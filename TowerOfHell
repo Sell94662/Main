@@ -20,9 +20,7 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local LocalPlayer = Players.LocalPlayer
 
--- ==========================================================
 -- БАЗОВЫЙ ОБХОД АНТИ-ЧИТА (Anti-Kick)
--- ==========================================================
 pcall(function()
     local mt = getrawmetatable(game)
     local oldNamecall = mt.__namecall
@@ -34,7 +32,6 @@ pcall(function()
     end)
     setreadonly(mt, true)
     
-    -- Удаляем локальные скрипты защиты, если они есть
     for _, v in pairs(LocalPlayer.PlayerScripts:GetChildren()) do
         if v.Name == "LocalScript" or v.Name == "LocalScript2" then
             v:Destroy()
@@ -42,31 +39,25 @@ pcall(function()
     end
 end)
 
--- ==========================================================
 -- ПЕРЕМЕННЫЕ
--- ==========================================================
 local noclipActive, infJumpActive, flyActive, tapTpEnabled = false, false, false, false
 local flySpeed = 50
 local noclipConnection, flyConnection = nil, nil
 local flyBV, flyBG = nil, nil
 local tapConn = nil
 
--- Точка финиша
+-- ТОЧКА ФИНИША (Исправлено, чтобы не падать под пол)
 local function GetFinishPosition()
     local success, pos = pcall(function()
         return workspace.tower.sections.finish.start.Position
     end)
     if success and pos then
-        return pos + Vector3.new(0, 3, 0) -- БЫЛО (0, 3, 0), СТАЛО (0, -7, 0)
+        return pos + Vector3.new(0, 3, 0) 
     end
-    return Vector3.new(43.00, 365.84, 99.63) -- БЫЛО 359.84, СТАЛО 349.84
+    return Vector3.new(43.00, 359.84, 99.63) 
 end
 
--- ==========================================================
 -- ФУНКЦИИ
--- ==========================================================
-
--- 1. Безопасный телепорт (Tween)
 local function SafeTeleport(targetPos)
     local char = LocalPlayer.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return end
@@ -81,7 +72,6 @@ local function SafeTeleport(targetPos)
     tween.Completed:Wait()
 end
 
--- 2. NoClip
 local function ToggleNoClip(state)
     noclipActive = state
     if state then
@@ -101,7 +91,6 @@ local function ToggleNoClip(state)
     end
 end
 
--- 3. Fly Mode (LinearVelocity + AlignOrientation)
 local function ToggleFly(state)
     flyActive = state
     local char = LocalPlayer.Character
@@ -155,7 +144,6 @@ local function ToggleFly(state)
     end
 end
 
--- 4. Tap/Click Teleport
 local function ToggleTapTp(state)
     tapTpEnabled = state
     if state and not tapConn then
@@ -173,7 +161,6 @@ local function ToggleTapTp(state)
     end
 end
 
--- 5. Infinite Jump (Исправлено от утечки памяти)
 UserInputService.JumpRequest:Connect(function()
     if infJumpActive and LocalPlayer.Character then
         local humanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
@@ -183,13 +170,11 @@ UserInputService.JumpRequest:Connect(function()
     end
 end)
 
--- ==========================================================
--- ВКЛАДКИ (Ключи V3 для сброса старых конфигов)
--- ==========================================================
+-- ВКЛАДКИ
 local MainTab = Window:CreateTab({EN = "Main", RU = "Главная"})
 local PlayerTab = Window:CreateTab({EN = "Player", RU = "Игрок"})
 
--- ==================== MAIN TAB ====================
+-- MAIN TAB
 MainTab:AddSection({EN = "Tower Automation", RU = "Автоматизация башни"})
 
 MainTab:AddButton({EN = "Instant Win (To Finish)", RU = "Мгновенная победа (Телепорт)"}, function()
@@ -197,28 +182,26 @@ MainTab:AddButton({EN = "Instant Win (To Finish)", RU = "Мгновенная п
     print("[ToH]: Телепорт на финиш выполнен.")
 end)
 
-MainTab:AddToggle({EN = "NoClip (Walk through walls)", RU = "NoClip (Сквозь стены)"}, "NoClipKey_V3", false, ToggleNoClip)
+MainTab:AddToggle({EN = "NoClip (Walk through walls)", RU = "NoClip (Сквозь стены)"}, "NoClipKey_V5", false, ToggleNoClip)
+MainTab:AddToggle({EN = "Tap / Click Teleport", RU = "Телепорт по клику / тапу"}, "TapTpKey_V5", false, ToggleTapTp)
 
-MainTab:AddToggle({EN = "Tap / Click Teleport", RU = "Телепорт по клику / тапу"}, "TapTpKey_V3", false, ToggleTapTp)
-
--- ==================== PLAYER TAB ====================
+-- PLAYER TAB
 PlayerTab:AddSection({EN = "Movement & Physics", RU = "Физика и полет"})
 
-PlayerTab:AddToggle({EN = "Infinite Jump", RU = "Бесконечный прыжок"}, "InfJumpKey_V3", false, function(state)
+PlayerTab:AddToggle({EN = "Infinite Jump", RU = "Бесконечный прыжок"}, "InfJumpKey_V5", false, function(state)
     infJumpActive = state
 end)
 
-PlayerTab:AddToggle({EN = "Fly Mode", RU = "Режим полета"}, "FlyKey_V3", false, ToggleFly)
+PlayerTab:AddToggle({EN = "Fly Mode", RU = "Режим полета"}, "FlyKey_V5", false, ToggleFly)
+PlayerTab:AddSlider({EN = "Fly Speed", RU = "Скорость полета"}, "FlySpeedKey_V5", 20, 200, 50, function(v) flySpeed = v end)
 
-PlayerTab:AddSlider({EN = "Fly Speed", RU = "Скорость полета"}, "FlySpeedKey_V3", 20, 200, 50, function(v) flySpeed = v end)
-
-PlayerTab:AddSlider({EN = "WalkSpeed", RU = "Скорость бега"}, "SpeedKey_V3", 16, 150, 16, function(v)
+PlayerTab:AddSlider({EN = "WalkSpeed", RU = "Скорость бега"}, "SpeedKey_V5", 16, 150, 16, function(v)
     if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
-        LocalPlayer.Character:FindFirstChildOfClass("Humanoid").WalkSpeed = v
+        LocalPlayer.Character.Humanoid.WalkSpeed = v
     end
 end)
 
-PlayerTab:AddSlider({EN = "JumpPower", RU = "Высота прыжка"}, "JumpKey_V3", 50, 300, 50, function(v)
+PlayerTab:AddSlider({EN = "JumpPower", RU = "Высота прыжка"}, "JumpKey_V5", 50, 300, 50, function(v)
     if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
         local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
         hum.UseJumpPower = true
