@@ -34,12 +34,13 @@ pcall(function()
 end)
 
 -- ==========================================================
--- НАСТРОЙКИ КООРДИНАТ
+-- НАСТРОЙКИ
 -- ==========================================================
 local SAFE_POSITION = Vector3.new(-239.08, 179.78, 352.48)
+local TELEPORT_RADIUS = 75 -- УВЕЛИЧЕНО С 25 ДО 75
 
 -- ==========================================================
--- ПЕРЕМЕННЫЕ СОСТОЯНИЙ
+-- ПЕРЕМЕННЫЕ
 -- ==========================================================
 local autoWinActive = false
 local infJumpActive = false
@@ -58,28 +59,48 @@ local PlayerTab = Window:CreateTab({EN = "Movement", RU = "Физика и Дв�
 local VisualTab = Window:CreateTab({EN = "Visuals", RU = "Визуал и ESP"})
 
 -- ==========================================================
--- 1. АВТОМАТИЗАЦИЯ (MAIN TAB)
+-- 1. АВТОМАТИЗАЦИЯ
 -- ==========================================================
 MainTab:AddSection({EN = "Disaster Control", RU = "Управление катастрофами"})
 
 local disasterLabel = MainTab:AddLabel({EN = "Next Disaster: Waiting...", RU = "Следующая катастрофа: Ожидание..."})
 
+-- Исправленное обновление названия катастрофы
 RunService.Heartbeat:Connect(function()
-    pcall(function()
+    if not disasterLabel or not disasterLabel.Parent then return end
+    
+    local disasterName = nil
+    
+    -- 1. Пытаемся найти StringValue с названием катастрофы в Workspace (самый надежный способ)
+    local disasterVal = Workspace:FindFirstChild("Disaster") or Workspace:FindFirstChild("CurrentDisaster")
+    if disasterVal and disasterVal:IsA("StringValue") and disasterVal.Value ~= "" then
+        disasterName = disasterVal.Value
+    end
+    
+    -- 2. Если не нашли, лезем в GUI игрока
+    if not disasterName then
         local gui = LocalPlayer.PlayerGui:FindFirstChild("MainGui")
-        if gui and gui:FindFirstChild("DisplayMessage") then
-            local disasterText = gui.DisplayMessage.Text
-            if disasterText and disasterText ~= "" then
-                disasterLabel:SetText({EN = "Disaster: " .. disasterText, RU = "Катастрофа: " .. disasterText})
-            else
-                disasterLabel:SetText({EN = "Next Disaster: Waiting...", RU = "Следующая катастрофа: Ожидание..."})
+        if gui then
+            local msg = gui:FindFirstChild("DisplayMessage") or gui:FindFirstChild("DisasterText") or gui:FindFirstChild("Message")
+            if msg and msg:IsA("TextLabel") and msg.Text ~= "" then
+                -- Отсекаем системный текст, если он там есть
+                if not string.find(msg.Text, "Welcome") and not string.find(msg.Text, "Waiting") then
+                    disasterName = msg.Text
+                end
             end
         end
-    end)
+    end
+
+    -- Применяем текст напрямую к Label
+    if disasterName then
+        disasterLabel.Text = "Катастрофа: " .. disasterName
+    else
+        disasterLabel.Text = "Следующая катастрофа: Ожидание..."
+    end
 end)
 
--- УМНЫЙ AUTO WIN (ТЕЛЕПОРТ В БЕЗОПАСНУЮ ЗОНУ)
-MainTab:AddToggle({EN = "Auto Win (Safe Zone)", RU = "Авто-победа (Безопасная зона)"}, "AutoWinKey_V4", false, function(state)
+-- УМНЫЙ AUTO WIN
+MainTab:AddToggle({EN = "Auto Win (Safe Zone)", RU = "Авто-победа (Безопасная зона)"}, "AutoWinKey_V5", false, function(state)
     autoWinActive = state
     
     if state then
@@ -92,8 +113,8 @@ MainTab:AddToggle({EN = "Auto Win (Safe Zone)", RU = "Авто-победа (Б�
                     local hrp = char.HumanoidRootPart
                     local distance = (hrp.Position - SAFE_POSITION).Magnitude
                     
-                    -- Если игрок находится дальше 25 стадов от безопасной точки (новый раунд или упал)
-                    if distance > 25 then
+                    -- Проверка радиуса (теперь 75)
+                    if distance > TELEPORT_RADIUS then
                         hrp.CFrame = CFrame.new(SAFE_POSITION)
                         hrp.AssemblyLinearVelocity = Vector3.zero
                         hrp.AssemblyAngularVelocity = Vector3.zero
@@ -105,18 +126,18 @@ MainTab:AddToggle({EN = "Auto Win (Safe Zone)", RU = "Авто-победа (Б�
 end)
 
 -- ==========================================================
--- 2. ФИЗИКА И ДВИЖЕНИЕ (PLAYER TAB)
+-- 2. ФИЗИКА И ДВИЖЕНИЕ
 -- ==========================================================
 PlayerTab:AddSection({EN = "Movement & Physics", RU = "Физика персонажа"})
 
-PlayerTab:AddSlider({EN = "WalkSpeed", RU = "Скорость бега"}, "SpeedKey_V4", 16, 150, 16, function(v)
+PlayerTab:AddSlider({EN = "WalkSpeed", RU = "Скорость бега"}, "SpeedKey_V5", 16, 150, 16, function(v)
     local char = LocalPlayer.Character
     if char and char:FindFirstChildOfClass("Humanoid") then
         char:FindFirstChildOfClass("Humanoid").WalkSpeed = v
     end
 end)
 
-PlayerTab:AddSlider({EN = "JumpPower", RU = "Высота прыжка"}, "JumpKey_V4", 50, 300, 50, function(v)
+PlayerTab:AddSlider({EN = "JumpPower", RU = "Высота прыжка"}, "JumpKey_V5", 50, 300, 50, function(v)
     local char = LocalPlayer.Character
     if char and char:FindFirstChildOfClass("Humanoid") then
         local hum = char:FindFirstChildOfClass("Humanoid")
@@ -125,7 +146,7 @@ PlayerTab:AddSlider({EN = "JumpPower", RU = "Высота прыжка"}, "JumpK
     end
 end)
 
-PlayerTab:AddToggle({EN = "Infinite Jump", RU = "Бесконечный прыжок"}, "InfJumpKey_V4", false, function(state)
+PlayerTab:AddToggle({EN = "Infinite Jump", RU = "Бесконечный прыжок"}, "InfJumpKey_V5", false, function(state)
     infJumpActive = state
     if state then
         UserInputService.JumpRequest:Connect(function()
@@ -138,7 +159,7 @@ PlayerTab:AddToggle({EN = "Infinite Jump", RU = "Бесконечный прыж
 end)
 
 -- Fly Mode (Современный, с Lerp)
-PlayerTab:AddToggle({EN = "Fly Mode (LinearVelocity)", RU = "Режим полета"}, "FlyKey_V4", false, function(state)
+PlayerTab:AddToggle({EN = "Fly Mode (LinearVelocity)", RU = "Режим полета"}, "FlyKey_V5", false, function(state)
     flyActive = state
     local char = LocalPlayer.Character
     if not char then return end
@@ -190,14 +211,14 @@ PlayerTab:AddToggle({EN = "Fly Mode (LinearVelocity)", RU = "Режим поле
     end
 end)
 
-PlayerTab:AddSlider({EN = "Fly Speed", RU = "Скорость полета"}, "FlySpeedKey_V4", 30, 200, 60, function(v) flySpeed = v end)
+PlayerTab:AddSlider({EN = "Fly Speed", RU = "Скорость полета"}, "FlySpeedKey_V5", 30, 200, 60, function(v) flySpeed = v end)
 
 -- ==========================================================
--- 3. ВИЗУАЛЬНЫЕ ФУНКЦИИ (VISUAL TAB)
+-- 3. ВИЗУАЛЬНЫЕ ФУНКЦИИ
 -- ==========================================================
 VisualTab:AddSection({EN = "Visual Enhancements", RU = "Визуальные улучшения"})
 
-VisualTab:AddToggle({EN = "FullBright & No Fog", RU = "Яркость и без тумана"}, "FullBrightKey_V4", false, function(state)
+VisualTab:AddToggle({EN = "FullBright & No Fog", RU = "Яркость и без тумана"}, "FullBrightKey_V5", false, function(state)
     local lighting = game:GetService("Lighting")
     if state then
         lighting.Brightness = 2
@@ -211,7 +232,7 @@ VisualTab:AddToggle({EN = "FullBright & No Fog", RU = "Яркость и без 
     end
 end)
 
-VisualTab:AddToggle({EN = "Player ESP", RU = "Подсветка игроков (ESP)"}, "ESPKey_V4", false, function(state)
+VisualTab:AddToggle({EN = "Player ESP", RU = "Подсветка игроков (ESP)"}, "ESPKey_V5", false, function(state)
     espActive = state
     if state then
         espConn = RunService.RenderStepped:Connect(function()
