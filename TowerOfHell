@@ -1,6 +1,7 @@
--- Подключение фреймворка
+-- Подключение фреймворка с GitHub (как в документации)
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/TheBloxyScripts/BloxyScripts/main/main.lua"))()
 
+-- Создание главного окна
 local Window = Library:CreateWindow({
     Name = "BloxyScripts | Tower of Hell",
     LoadingTitle = "Загрузка модулей...",
@@ -8,7 +9,9 @@ local Window = Library:CreateWindow({
     FolderName = "BloxyConfigs"
 })
 
-if not Window then
+-- Безопасный доступ
+local Hub = Window or getgenv().CustomHub
+if not Hub then
     warn("Ошибка: Главный фреймворк не инициализирован!")
     return
 end
@@ -19,120 +22,167 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
--- ==========================================================
--- БАЗОВЫЙ ОБХОД АНТИ-ЧИТА (Anti-Kick)
--- ==========================================================
-local function BypassAntiCheat()
-    pcall(function()
-        local mt = getrawmetatable(game)
-        local oldNamecall = mt.__namecall
-        setreadonly(mt, false)
-        mt.__namecall = newcclosure(function(self, ...)
-            local method = getnamecallmethod()
-            if method == "Kick" then return end
-            return oldNamecall(self, ...)
-        end)
-        setreadonly(mt, true)
-    end)
-    pcall(function()
-        for _, v in pairs(LocalPlayer.PlayerScripts:GetChildren()) do
-            if v.Name == "LocalScript" or v.Name == "LocalScript2" then
-                v:Destroy()
-            end
-        end
-    end)
-end
-BypassAntiCheat()
+-- Точные координаты финиша (+1 по Y)
+local WIN_POSITION = Vector3.new(43.00, 359.84, 99.63)
 
--- ==========================================================
--- ПЕРЕМЕННЫЕ ДЛЯ FLY
--- ==========================================================
+-- Переменные состояний
+local noclipActive = false
+local infJumpActive = false
 local flyActive = false
 local flySpeed = 50
+local tapTpEnabled = false
+
+local noclipConnection = nil
 local flyConnection = nil
-local flyAttachment = nil
-local flyLinearVelocity = nil
-local flyAlignOrientation = nil
+local att0, lv, la = nil, nil, nil
 
--- ==========================================================
--- ФУНКЦИЯ ВКЛЮЧЕНИЯ / ВЫКЛЮЧЕНИЯ FLY
--- ==========================================================
-local function ToggleFly(state)
-    flyActive = state
-    local character = LocalPlayer.Character
-    if not character then return end
-
-    local rootPart = character:FindFirstChild("HumanoidRootPart")
-    if not rootPart then return end
-
-    if flyActive then
-        -- Создаем Attachment
-        flyAttachment = Instance.new("Attachment")
-        flyAttachment.Name = "FlyAttachment"
-        flyAttachment.Parent = rootPart
-
-        -- Создаем LinearVelocity для движения
-        flyLinearVelocity = Instance.new("LinearVelocity")
-        flyLinearVelocity.Name = "FlyLinearVelocity"
-        flyLinearVelocity.Attachment0 = flyAttachment
-        flyLinearVelocity.MaxForce = math.huge -- Максимальная сила для преодоления гравитации
-        flyLinearVelocity.VectorVelocity = Vector3.zero
-        flyLinearVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
-        flyLinearVelocity.Parent = rootPart
-
-        -- Создаем AlignOrientation для поворота за камерой
-        flyAlignOrientation = Instance.new("AlignOrientation")
-        flyAlignOrientation.Name = "FlyAlignOrientation"
-        flyAlignOrientation.Attachment0 = flyAttachment
-        flyAlignOrientation.MaxTorque = math.huge
-        flyAlignOrientation.Responsiveness = 200 -- Высокая отзывчивость для мгновенного поворота
-        flyAlignOrientation.Parent = rootPart
-
-        -- Основной цикл полета
-        flyConnection = RunService.RenderStepped:Connect(function()
-            if not flyActive or not flyLinearVelocity or not flyAlignOrientation then return end
-
-            local camera = workspace.CurrentCamera
-            local moveDirection = Vector3.zero
-
-            -- Проверяем нажатые клавиши
-            if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDirection = moveDirection + camera.CFrame.LookVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDirection = moveDirection - camera.CFrame.LookVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDirection = moveDirection - camera.CFrame.RightVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDirection = moveDirection + camera.CFrame.RightVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDirection = moveDirection + Vector3.new(0, 1, 0) end
-            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveDirection = moveDirection - Vector3.new(0, 1, 0) end
-
-            -- Применяем скорость и ориентацию
-            flyLinearVelocity.VectorVelocity = moveDirection * flySpeed
-            flyAlignOrientation.CFrame = camera.CFrame
-        end)
-    else
-        -- Отключаем и удаляем все созданные объекты
-        if flyConnection then flyConnection:Disconnect() flyConnection = nil end
-        if flyLinearVelocity then flyLinearVelocity:Destroy() flyLinearVelocity = nil end
-        if flyAlignOrientation then flyAlignOrientation:Destroy() flyAlignOrientation = nil end
-        if flyAttachment then flyAttachment:Destroy() flyAttachment = nil end
-    end
-end
-
--- ==========================================================
--- ВКЛАДКИ (UI)
--- ==========================================================
+-- Создание вкладок (по документации)
 local MainTab = Window:CreateTab({EN = "Main", RU = "Главная"})
 local PlayerTab = Window:CreateTab({EN = "Player", RU = "Игрок"})
 
--- ... (Здесь ваш код для MainTab: Instant Win, NoClip, Tap TP) ...
+-- ==================== MAIN TAB ====================
+MainTab:AddSection({EN = "Tower Automation", RU = "Автоматизация башни"})
+
+-- 1. Instant Win (Телепорт на точные координаты +1 по Y)
+MainTab:AddButton({EN = "Instant Win (To Finish)", RU = "Мгновенная победа (Телепорт)"}, function()
+    local character = LocalPlayer.Character
+    if character and character:FindFirstChild("HumanoidRootPart") then
+        character.HumanoidRootPart.CFrame = CFrame.new(WIN_POSITION)
+        character.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
+        print("[ToH]: Мгновенная победа — телепорт на координаты!")
+    end
+end)
+
+-- 2. NoClip (Прохождение сквозь стены и блоки)
+MainTab:AddToggle({EN = "NoClip (Walk through walls)", RU = "NoClip (Сквозь стены)"}, "NoClipKey", false, function(state)
+    noclipActive = state
+    if state then
+        if not noclipConnection then
+            noclipConnection = RunService.Stepped:Connect(function()
+                if noclipActive and LocalPlayer.Character then
+                    for _, part in ipairs(LocalPlayer.Character:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            part.CanCollide = false
+                        end
+                    end
+                end
+            end)
+        end
+    else
+        if noclipConnection then
+            noclipConnection:Disconnect()
+            noclipConnection = nil
+        end
+    end
+end)
+
+-- 3. Tap / Click Teleport (Телепорт по клику мышью или тапу пальца на экране)
+MainTab:AddToggle({EN = "Tap / Click Teleport", RU = "Телепорт по клику / тапу"}, "TapTpKey", false, function(state)
+    tapTpEnabled = state
+end)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if not gameProcessed and tapTpEnabled then
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            local mouse = LocalPlayer:GetMouse()
+            if mouse and mouse.Hit and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(mouse.Hit.Position + Vector3.new(0, 3, 0))
+            end
+        end
+    end
+end)
+
 
 -- ==================== PLAYER TAB ====================
 PlayerTab:AddSection({EN = "Movement & Physics", RU = "Физика и полет"})
 
--- Fly Mode (Новая реализация)
-PlayerTab:AddToggle({EN = "Fly Mode (LinearVelocity)", RU = "Режим полета (LinearVelocity)"}, "FlyKey_V2", false, ToggleFly)
+-- 4. Infinite Jump (Бесконечный прыжок)
+PlayerTab:AddToggle({EN = "Infinite Jump", RU = "Бесконечный прыжок"}, "InfJumpKey", false, function(state)
+    infJumpActive = state
+end)
+
+UserInputService.JumpRequest:Connect(function()
+    if infJumpActive and LocalPlayer.Character then
+        local humanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        end
+    end
+end)
+
+-- 5. Fly Mode (Полет через LinearVelocity)
+PlayerTab:AddToggle({EN = "Fly Mode (LinearVelocity)", RU = "Режим полета (LinearVelocity)"}, "FlyKey", false, function(state)
+    flyActive = state
+    local character = LocalPlayer.Character
+    if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+    
+    local rootPart = character.HumanoidRootPart
+    
+    if flyActive then
+        att0 = Instance.new("Attachment")
+        att0.Name = "ToHFlyAttachment"
+        att0.Parent = rootPart
+        
+        lv = Instance.new("LinearVelocity")
+        lv.Name = "ToHLinearVelocity"
+        lv.Attachment0 = att0
+        lv.MaxForce = math.huge
+        lv.VectorVelocity = Vector3.zero
+        lv.RelativeTo = Enum.ActuatorRelativeTo.World
+        lv.Parent = rootPart
+        
+        la = Instance.new("AlignOrientation")
+        la.Name = "ToHAlignOrientation"
+        la.Attachment0 = att0
+        la.MaxTorque = math.huge
+        la.Responsiveness = 200
+        la.Parent = rootPart
+        
+        flyConnection = RunService.RenderStepped:Connect(function()
+            if not flyActive or not lv or not la then return end
+            
+            local cam = workspace.CurrentCamera
+            local moveDir = Vector3.zero
+            
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + cam.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - cam.CFrame.LookVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - cam.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + cam.CFrame.RightVector end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDir = moveDir + Vector3.new(0, 1, 0) end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveDir = moveDir - Vector3.new(0, 1, 0) end
+            
+            lv.VectorVelocity = moveDir * flySpeed
+            la.CFrame = cam.CFrame
+        end)
+    else
+        if flyConnection then flyConnection:Disconnect() flyConnection = nil end
+        if lv then lv:Destroy() lv = nil end
+        if la then la:Destroy() la = nil end
+        if att0 then att0:Destroy() att0 = nil end
+    end
+end)
 
 -- Настройка скорости полета
-PlayerTab:AddSlider({EN = "Fly Speed", RU = "Скорость полета"}, "FlySpeedKey_V2", 20, 200, 50, function(value)
+PlayerTab:AddSlider({EN = "Fly Speed", RU = "Скорость полета"}, "FlySpeedKey", 20, 200, 50, function(value)
     flySpeed = value
 end)
 
--- ... (Остальные слайдеры: WalkSpeed, JumpPower) ...
+-- 6. WalkSpeed Slider
+PlayerTab:AddSlider({EN = "WalkSpeed", RU = "Скорость бега"}, "SpeedKey", 16, 150, 16, function(value)
+    local character = LocalPlayer.Character
+    if character and character:FindFirstChildOfClass("Humanoid") then
+        character:FindFirstChildOfClass("Humanoid").WalkSpeed = value
+    end
+end)
+
+-- 7. JumpPower Slider
+PlayerTab:AddSlider({EN = "JumpPower", RU = "Высота прыжка"}, "JumpKey", 50, 300, 50, function(value)
+    local character = LocalPlayer.Character
+    if character and character:FindFirstChildOfClass("Humanoid") then
+        local hum = character:FindFirstChildOfClass("Humanoid")
+        hum.UseJumpPower = true
+        hum.JumpPower = value
+    end
+end)
+
+MainTab:AddLabel({EN = "Status: Tower of Hell Loaded", RU = "Статус: Скрипт успешно загружен"})
