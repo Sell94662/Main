@@ -34,7 +34,6 @@ pcall(function()
     end)
     setreadonly(mt, true)
     
-    -- Удаляем локальные скрипты защиты, если они есть
     for _, v in pairs(LocalPlayer.PlayerScripts:GetChildren()) do
         if v.Name == "LocalScript" or v.Name == "LocalScript2" then
             v:Destroy()
@@ -51,23 +50,12 @@ local noclipConnection, flyConnection = nil, nil
 local flyBV, flyBG = nil, nil
 local tapConn = nil
 
--- Точка финиша
-local function GetFinishPosition()
-    local success, pos = pcall(function()
-        return workspace.tower.sections.finish.start.Position
-    end)
-    if success and pos then
-        return pos + Vector3.new(0, 3, 0)
-    end
-    return Vector3.new(43.00, 359.84, 99.63)
-end
-
 -- ==========================================================
 -- ФУНКЦИИ
 -- ==========================================================
 
--- 1. Безопасный телепорт (Tween)
-local function SafeTeleport(targetPos)
+-- 1. Безопасный телепорт (Теперь принимает CFrame, чтобы поворачивать персонажа)
+local function SafeTeleport(targetCFrame)
     local char = LocalPlayer.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return end
     
@@ -75,8 +63,8 @@ local function SafeTeleport(targetPos)
     root.AssemblyLinearVelocity = Vector3.zero
     root.AssemblyAngularVelocity = Vector3.zero
     
-    local tweenInfo = TweenInfo.new(0.15, Enum.EasingStyle.Linear)
-    local tween = TweenService:Create(root, tweenInfo, {CFrame = CFrame.new(targetPos)})
+    local tweenInfo = TweenInfo.new(0.2, Enum.EasingStyle.Linear)
+    local tween = TweenService:Create(root, tweenInfo, {CFrame = targetCFrame})
     tween:Play()
     tween.Completed:Wait()
 end
@@ -164,7 +152,7 @@ local function ToggleTapTp(state)
             if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                 local mouse = LocalPlayer:GetMouse()
                 if mouse and mouse.Hit and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                    SafeTeleport(mouse.Hit.Position + Vector3.new(0, 3, 0))
+                    SafeTeleport(CFrame.new(mouse.Hit.Position + Vector3.new(0, 3, 0)))
                 end
             end
         end)
@@ -173,7 +161,7 @@ local function ToggleTapTp(state)
     end
 end
 
--- 5. Infinite Jump (Исправлено от утечки памяти)
+-- 5. Infinite Jump
 UserInputService.JumpRequest:Connect(function()
     if infJumpActive and LocalPlayer.Character then
         local humanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
@@ -184,7 +172,7 @@ UserInputService.JumpRequest:Connect(function()
 end)
 
 -- ==========================================================
--- ВКЛАДКИ (Ключи V3 для сброса старых конфигов)
+-- ВКЛАДКИ (Ключи V3)
 -- ==========================================================
 local MainTab = Window:CreateTab({EN = "Main", RU = "Главная"})
 local PlayerTab = Window:CreateTab({EN = "Player", RU = "Игрок"})
@@ -193,8 +181,29 @@ local PlayerTab = Window:CreateTab({EN = "Player", RU = "Игрок"})
 MainTab:AddSection({EN = "Tower Automation", RU = "Автоматизация башни"})
 
 MainTab:AddButton({EN = "Instant Win (To Finish)", RU = "Мгновенная победа (Телепорт)"}, function()
-    SafeTeleport(GetFinishPosition())
+    local success, finishPart = pcall(function()
+        return workspace.tower.sections.finish.start
+    end)
+    
+    local targetCFrame
+    if success and finishPart then
+        -- Берем CFrame портала (позиция + поворот) и поднимаем на 3 стада
+        targetCFrame = finishPart.CFrame + Vector3.new(0, 3, 0)
+    else
+        -- Фоллбек, если объект не найден
+        targetCFrame = CFrame.new(43.00, 359.84, 99.63, 43.00, 359.84, 98.63)
+    end
+    
+    -- 1. Телепортируем плавно и ровно лицом к выходу
+    SafeTeleport(targetCFrame)
     print("[ToH]: Телепорт на финиш выполнен.")
+    
+    -- 2. Даем легкий толчок вперед (чтобы 100% засчитало победу)
+    local char = LocalPlayer.Character
+    if char and char:FindFirstChild("HumanoidRootPart") then
+        local root = char.HumanoidRootPart
+        root.AssemblyLinearVelocity = root.CFrame.LookVector * 30
+    end
 end)
 
 MainTab:AddToggle({EN = "NoClip (Walk through walls)", RU = "NoClip (Сквозь стены)"}, "NoClipKey_V3", false, ToggleNoClip)
