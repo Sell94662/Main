@@ -57,9 +57,9 @@ local function GetFinishPosition()
         return workspace.tower.sections.finish.start.Position
     end)
     if success and pos then
-        return pos + Vector3.new(0, -7, 0) -- БЫЛО (0, 3, 0), СТАЛО (0, -7, 0)
+        return pos + Vector3.new(0, -5, 0) -- БЫЛО (0, 3, 0), СТАЛО (0, -7, 0)
     end
-    return Vector3.new(43.00, 349.84, 99.63) -- БЫЛО 359.84, СТАЛО 349.84
+    return Vector3.new(43.00, 359.84, 99.63) -- БЫЛО 359.84, СТАЛО 349.84
 end
 
 -- ==========================================================
