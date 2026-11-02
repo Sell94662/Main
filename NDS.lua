@@ -20,9 +20,7 @@ local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
 
--- ==========================================================
 -- БАЗОВЫЙ ОБХОД АНТИ-ЧИТА (Anti-Kick)
--- ==========================================================
 pcall(function()
     local mt = getrawmetatable(game)
     local oldNamecall = mt.__namecall
@@ -36,19 +34,21 @@ pcall(function()
 end)
 
 -- ==========================================================
+-- НАСТРОЙКИ КООРДИНАТ
+-- ==========================================================
+local SAFE_POSITION = Vector3.new(-239.08, 179.78, 352.48)
+
+-- ==========================================================
 -- ПЕРЕМЕННЫЕ СОСТОЯНИЙ
 -- ==========================================================
 local autoWinActive = false
-local noclipActive = false
 local infJumpActive = false
 local flyActive = false
 local flySpeed = 60
-local walkOnWaterActive = false
-local noFallActive = false
+local espActive = false
 
-local noclipConn, flyConn, waterConn, espConn = nil, nil, nil, nil
+local flyConn, espConn = nil, nil
 local flyAtt, flyLV, flyLA = nil, nil, nil
-local waterPlatform = nil
 
 -- ==========================================================
 -- ВКЛАДКИ
@@ -78,19 +78,30 @@ RunService.Heartbeat:Connect(function()
     end)
 end)
 
-MainTab:AddToggle({EN = "Auto Win (Safe Lobby)", RU = "Авто-победа (В лобби)"}, "AutoWinKey_V2", false, function(state)
+-- УМНЫЙ AUTO WIN (ТЕЛЕПОРТ В БЕЗОПАСНУЮ ЗОНУ)
+MainTab:AddToggle({EN = "Auto Win (Safe Zone)", RU = "Авто-победа (Безопасная зона)"}, "AutoWinKey_V4", false, function(state)
     autoWinActive = state
-    task.spawn(function()
-        while autoWinActive do
-            task.wait(0.5)
-            local char = LocalPlayer.Character
-            if char and char:FindFirstChild("HumanoidRootPart") then
-                -- Телепорт в безопасную зону лобби (высоко в небе)
-                char.HumanoidRootPart.CFrame = CFrame.new(0, 300, 0)
-                char.HumanoidRootPart.AssemblyLinearVelocity = Vector3.zero
+    
+    if state then
+        task.spawn(function()
+            while autoWinActive do
+                task.wait(0.5)
+                local char = LocalPlayer.Character
+                
+                if char and char:FindFirstChild("HumanoidRootPart") then
+                    local hrp = char.HumanoidRootPart
+                    local distance = (hrp.Position - SAFE_POSITION).Magnitude
+                    
+                    -- Если игрок находится дальше 25 стадов от безопасной точки (новый раунд или упал)
+                    if distance > 25 then
+                        hrp.CFrame = CFrame.new(SAFE_POSITION)
+                        hrp.AssemblyLinearVelocity = Vector3.zero
+                        hrp.AssemblyAngularVelocity = Vector3.zero
+                    end
+                end
             end
-        end
-    end)
+        end)
+    end
 end)
 
 -- ==========================================================
@@ -98,14 +109,14 @@ end)
 -- ==========================================================
 PlayerTab:AddSection({EN = "Movement & Physics", RU = "Физика персонажа"})
 
-PlayerTab:AddSlider({EN = "WalkSpeed", RU = "Скорость бега"}, "SpeedKey_V2", 16, 150, 16, function(v)
+PlayerTab:AddSlider({EN = "WalkSpeed", RU = "Скорость бега"}, "SpeedKey_V4", 16, 150, 16, function(v)
     local char = LocalPlayer.Character
     if char and char:FindFirstChildOfClass("Humanoid") then
         char:FindFirstChildOfClass("Humanoid").WalkSpeed = v
     end
 end)
 
-PlayerTab:AddSlider({EN = "JumpPower", RU = "Высота прыжка"}, "JumpKey_V2", 50, 300, 50, function(v)
+PlayerTab:AddSlider({EN = "JumpPower", RU = "Высота прыжка"}, "JumpKey_V4", 50, 300, 50, function(v)
     local char = LocalPlayer.Character
     if char and char:FindFirstChildOfClass("Humanoid") then
         local hum = char:FindFirstChildOfClass("Humanoid")
@@ -114,7 +125,7 @@ PlayerTab:AddSlider({EN = "JumpPower", RU = "Высота прыжка"}, "JumpK
     end
 end)
 
-PlayerTab:AddToggle({EN = "Infinite Jump", RU = "Бесконечный прыжок"}, "InfJumpKey_V2", false, function(state)
+PlayerTab:AddToggle({EN = "Infinite Jump", RU = "Бесконечный прыжок"}, "InfJumpKey_V4", false, function(state)
     infJumpActive = state
     if state then
         UserInputService.JumpRequest:Connect(function()
@@ -127,7 +138,7 @@ PlayerTab:AddToggle({EN = "Infinite Jump", RU = "Бесконечный прыж
 end)
 
 -- Fly Mode (Современный, с Lerp)
-PlayerTab:AddToggle({EN = "Fly Mode (LinearVelocity)", RU = "Режим полета"}, "FlyKey_V2", false, function(state)
+PlayerTab:AddToggle({EN = "Fly Mode (LinearVelocity)", RU = "Режим полета"}, "FlyKey_V4", false, function(state)
     flyActive = state
     local char = LocalPlayer.Character
     if not char then return end
@@ -165,7 +176,6 @@ PlayerTab:AddToggle({EN = "Fly Mode (LinearVelocity)", RU = "Режим поле
             if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveDir -= Vector3.new(0, 1, 0) end
             
             local targetVelocity = moveDir * flySpeed
-            -- Плавная интерполяция (Lerp)
             currentVelocity = currentVelocity:Lerp(targetVelocity, math.clamp(8 * dt, 0, 1))
             
             flyLV.VectorVelocity = currentVelocity
@@ -180,46 +190,14 @@ PlayerTab:AddToggle({EN = "Fly Mode (LinearVelocity)", RU = "Режим поле
     end
 end)
 
-PlayerTab:AddSlider({EN = "Fly Speed", RU = "Скорость полета"}, "FlySpeedKey_V2", 30, 200, 60, function(v) flySpeed = v end)
-
--- Walk on Water (Исправлено)
-PlayerTab:AddToggle({EN = "Walk on Water", RU = "Хождение по воде"}, "WaterKey_V2", false, function(state)
-    walkOnWaterActive = state
-    if state then
-        waterConn = RunService.Stepped:Connect(function()
-            local char = LocalPlayer.Character
-            if not char or not char:FindFirstChild("HumanoidRootPart") then return end
-            
-            if not waterPlatform then
-                waterPlatform = Instance.new("Part")
-                waterPlatform.Name = "WaterPlatform"
-                waterPlatform.Size = Vector3.new(6, 1, 6)
-                waterPlatform.Transparency = 1
-                waterPlatform.Anchored = true
-                waterPlatform.CanCollide = true
-                waterPlatform.Parent = Workspace
-            end
-            
-            local root = char.HumanoidRootPart
-            -- Если персонаж находится над водой (примерно на уровне Y = 0)
-            if root.Position.Y < 5 then
-                waterPlatform.CFrame = CFrame.new(root.Position.X, 0.5, root.Position.Z)
-            else
-                waterPlatform.CFrame = CFrame.new(0, -100, 0) -- Убираем платформу
-            end
-        end)
-    else
-        if waterConn then waterConn:Disconnect() waterConn = nil end
-        if waterPlatform then waterPlatform:Destroy() waterPlatform = nil end
-    end
-end)
+PlayerTab:AddSlider({EN = "Fly Speed", RU = "Скорость полета"}, "FlySpeedKey_V4", 30, 200, 60, function(v) flySpeed = v end)
 
 -- ==========================================================
 -- 3. ВИЗУАЛЬНЫЕ ФУНКЦИИ (VISUAL TAB)
 -- ==========================================================
 VisualTab:AddSection({EN = "Visual Enhancements", RU = "Визуальные улучшения"})
 
-VisualTab:AddToggle({EN = "FullBright & No Fog", RU = "Яркость и без тумана"}, "FullBrightKey_V2", false, function(state)
+VisualTab:AddToggle({EN = "FullBright & No Fog", RU = "Яркость и без тумана"}, "FullBrightKey_V4", false, function(state)
     local lighting = game:GetService("Lighting")
     if state then
         lighting.Brightness = 2
@@ -233,7 +211,7 @@ VisualTab:AddToggle({EN = "FullBright & No Fog", RU = "Яркость и без 
     end
 end)
 
-VisualTab:AddToggle({EN = "Player ESP", RU = "Подсветка игроков (ESP)"}, "ESPKey_V2", false, function(state)
+VisualTab:AddToggle({EN = "Player ESP", RU = "Подсветка игроков (ESP)"}, "ESPKey_V4", false, function(state)
     espActive = state
     if state then
         espConn = RunService.RenderStepped:Connect(function()
