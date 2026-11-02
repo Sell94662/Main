@@ -54,7 +54,7 @@ local tapConn = nil
 -- ФУНКЦИИ
 -- ==========================================================
 
--- 1. Безопасный телепорт (Теперь принимает CFrame, чтобы поворачивать персонажа)
+-- 1. Безопасный телепорт
 local function SafeTeleport(targetCFrame)
     local char = LocalPlayer.Character
     if not char or not char:FindFirstChild("HumanoidRootPart") then return end
@@ -172,7 +172,7 @@ UserInputService.JumpRequest:Connect(function()
 end)
 
 -- ==========================================================
--- ВКЛАДКИ (Ключи V3)
+-- ВКЛАДКИ (Ключи V5 для сброса конфига)
 -- ==========================================================
 local MainTab = Window:CreateTab({EN = "Main", RU = "Главная"})
 local PlayerTab = Window:CreateTab({EN = "Player", RU = "Игрок"})
@@ -181,53 +181,59 @@ local PlayerTab = Window:CreateTab({EN = "Player", RU = "Игрок"})
 MainTab:AddSection({EN = "Tower Automation", RU = "Автоматизация башни"})
 
 MainTab:AddButton({EN = "Instant Win (To Finish)", RU = "Мгновенная победа (Телепорт)"}, function()
+    -- Ищем портал финиша (разные варианты названий)
     local success, finishPart = pcall(function()
-        return workspace.tower.sections.finish.start
+        local tower = workspace:FindFirstChild("Tower") or workspace:FindFirstChild("tower")
+        local sections = tower:FindFirstChild("Sections") or tower:FindFirstChild("sections")
+        local finish = sections:FindFirstChild("Finish") or sections:FindFirstChild("finish")
+        return finish:FindFirstChild("Start") or finish:FindFirstChild("start")
     end)
     
-    local targetCFrame
     if success and finishPart then
-        -- Берем CFrame портала (позиция + поворот) и поднимаем на 3 стада
-        targetCFrame = finishPart.CFrame + Vector3.new(0, 3, 0)
+        -- Берем CFrame портала (позиция + направление взгляда)
+        -- Прибавляем 2 стада по Y, чтобы не застрять в полу
+        local targetCFrame = finishPart.CFrame + Vector3.new(0, 2, 0)
+        
+        SafeTeleport(targetCFrame)
+        
+        -- Даем толчок ВПЕРЕД по направлению портала, чтобы игра засчитала финиш
+        task.wait(0.1)
+        local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if root then
+            root.AssemblyLinearVelocity = root.CFrame.LookVector * 30
+        end
+        
+        print("[ToH]: Телепорт на финиш выполнен (залет прямо в дверь).")
     else
-        -- Фоллбек, если объект не найден
-        targetCFrame = CFrame.new(43.00, 359.84, 99.63, 43.00, 359.84, 98.63)
-    end
-    
-    -- 1. Телепортируем плавно и ровно лицом к выходу
-    SafeTeleport(targetCFrame)
-    print("[ToH]: Телепорт на финиш выполнен.")
-    
-    -- 2. Даем легкий толчок вперед (чтобы 100% засчитало победу)
-    local char = LocalPlayer.Character
-    if char and char:FindFirstChild("HumanoidRootPart") then
-        local root = char.HumanoidRootPart
-        root.AssemblyLinearVelocity = root.CFrame.LookVector * 30
+        -- Если объект не найден, летим по твоим координатам
+        SafeTeleport(CFrame.new(43.00, 359.84, 99.63))
+        print("[ToH]: Телепорт по координатам.")
     end
 end)
 
-MainTab:AddToggle({EN = "NoClip (Walk through walls)", RU = "NoClip (Сквозь стены)"}, "NoClipKey_V3", false, ToggleNoClip)
+-- NoClip ВЫКЛЮЧЕН по умолчанию (false)
+MainTab:AddToggle({EN = "NoClip (Walk through walls)", RU = "NoClip (Сквозь стены)"}, "NoClipKey_V5", false, ToggleNoClip)
 
-MainTab:AddToggle({EN = "Tap / Click Teleport", RU = "Телепорт по клику / тапу"}, "TapTpKey_V3", false, ToggleTapTp)
+MainTab:AddToggle({EN = "Tap / Click Teleport", RU = "Телепорт по клику / тапу"}, "TapTpKey_V5", false, ToggleTapTp)
 
 -- ==================== PLAYER TAB ====================
 PlayerTab:AddSection({EN = "Movement & Physics", RU = "Физика и полет"})
 
-PlayerTab:AddToggle({EN = "Infinite Jump", RU = "Бесконечный прыжок"}, "InfJumpKey_V3", false, function(state)
+PlayerTab:AddToggle({EN = "Infinite Jump", RU = "Бесконечный прыжок"}, "InfJumpKey_V5", false, function(state)
     infJumpActive = state
 end)
 
-PlayerTab:AddToggle({EN = "Fly Mode", RU = "Режим полета"}, "FlyKey_V3", false, ToggleFly)
+PlayerTab:AddToggle({EN = "Fly Mode", RU = "Режим полета"}, "FlyKey_V5", false, ToggleFly)
 
-PlayerTab:AddSlider({EN = "Fly Speed", RU = "Скорость полета"}, "FlySpeedKey_V3", 20, 200, 50, function(v) flySpeed = v end)
+PlayerTab:AddSlider({EN = "Fly Speed", RU = "Скорость полета"}, "FlySpeedKey_V5", 20, 200, 50, function(v) flySpeed = v end)
 
-PlayerTab:AddSlider({EN = "WalkSpeed", RU = "Скорость бега"}, "SpeedKey_V3", 16, 150, 16, function(v)
+PlayerTab:AddSlider({EN = "WalkSpeed", RU = "Скорость бега"}, "SpeedKey_V5", 16, 150, 16, function(v)
     if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
         LocalPlayer.Character:FindFirstChildOfClass("Humanoid").WalkSpeed = v
     end
 end)
 
-PlayerTab:AddSlider({EN = "JumpPower", RU = "Высота прыжка"}, "JumpKey_V3", 50, 300, 50, function(v)
+PlayerTab:AddSlider({EN = "JumpPower", RU = "Высота прыжка"}, "JumpKey_V5", 50, 300, 50, function(v)
     if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
         local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
         hum.UseJumpPower = true
