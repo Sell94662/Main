@@ -36,7 +36,7 @@ local noclipConnection = nil
 local flyConnection = nil
 local att0, lv, la = nil, nil, nil
 
--- Создание вкладок
+-- Создание вкладок (по документации)
 local MainTab = Window:CreateTab({EN = "Main", RU = "Главная"})
 local PlayerTab = Window:CreateTab({EN = "Player", RU = "Игрок"})
 
@@ -53,7 +53,7 @@ MainTab:AddButton({EN = "Instant Win (To Finish)", RU = "Мгновенная п
     end
 end)
 
--- 2. NoClip (Прохождение сквозь блоки)
+-- 2. NoClip (Прохождение сквозь стены и блоки)
 MainTab:AddToggle({EN = "NoClip (Walk through walls)", RU = "NoClip (Сквозь стены)"}, "NoClipKey", false, function(state)
     noclipActive = state
     if state then
@@ -119,12 +119,12 @@ PlayerTab:AddToggle({EN = "Fly Mode (LinearVelocity)", RU = "Режим поле
     local rootPart = character.HumanoidRootPart
     
     if flyActive then
-        -- Создаем точку привязки (Attachment) для физики
+        -- Создаем Attachment для физики LinearVelocity
         att0 = Instance.new("Attachment")
         att0.Name = "ToHFlyAttachment"
         att0.Parent = rootPart
         
-        -- LinearVelocity управляет вектором скорости и игнорирует гравитацию
+        -- LinearVelocity для управления скоростью в пространстве без гравитации
         lv = Instance.new("LinearVelocity")
         lv.Name = "ToHLinearVelocity"
         lv.Attachment0 = att0
@@ -133,7 +133,7 @@ PlayerTab:AddToggle({EN = "Fly Mode (LinearVelocity)", RU = "Режим поле
         lv.RelativeTo = Enum.ActuatorRelativeTo.World
         lv.Parent = rootPart
         
-        -- AlignOrientation удерживает персонажа в ровном положении по камере
+        -- AlignOrientation для удержания ровного положения по камере
         la = Instance.new("AlignOrientation")
         la.Name = "ToHAlignOrientation"
         la.Attachment0 = att0
@@ -188,4 +188,4 @@ PlayerTab:AddSlider({EN = "JumpPower", RU = "Высота прыжка"}, "JumpK
     end
 end)
 
-MainTab:AddLabel({EN = "Status: Tower of Hell Loaded", RU = "Статус: Скрипт загружен"})
+MainTab:AddLabel({EN = "Status: Tower of Hell Loaded", RU = "Статус: Скрипт успешно загружен"})
